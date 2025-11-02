@@ -38,8 +38,8 @@
 - 支持docker镜像运行
 - 支持amd64和arm64架构
 - https支持
-- 每当有新增strm文件时自动触发emby提取媒体信息
 - 支持添加多种来源的目录来刮削和整理
+  基于postgres数据库构建，解决sqlite可能死锁和性能低下问题，postgres完全内建开箱即用，也可以连接已有的外部数据库
 
 ## 缺点：
 - 由于使用开放平台接口，所以每次同步其实都全量查询了115文件列表，所以速度天生不可能快
@@ -115,6 +115,11 @@ services:
             - /vol2/1000/网盘:/media
         environment:
             - TZ=Asia/Shanghai
+            - DB_HOST=localhost
+            - DB_PORT=5432
+            - DB_USER=qms
+            - DB_PASSWORD=qms123456
+            - DB_NAME=qms
 ```
   - 如果使用emby，且未使用外网302，需要让emby也能访问到your_domain
     - 如果是宿主机直接安装，需要给/etc/hosts或者windows的hosts文件中加入一行：127.0.0.1 your_domain
@@ -126,9 +131,10 @@ extra_hosts:
 
 ## FAQ
 
-- 如果有服务无法启动或者运行逻辑始终不对，建议删除/app/config/db.db，然后重启容器，注意：该操作会清除所有数据
+- 如果有服务无法启动或者运行逻辑始终不对，建议删除/app/config/postgres，然后重启容器，注意：该操作会清除所有数据
 - /app/config/logs下的内容可以删除，不影响运行
-- /app/config/libs下的内容如果删除，会影响网页查看同步详情，但是不影响其他逻辑，如果磁盘空间有限，可以删除
+- /app/config/libs下的内容如果删除，不影响运行
+- /ap/config/posgres是数据库目录，建议定期备份
 - emby外网302目前使用8095和8094端口，暂时不能变动
 - 如果使用CD2的本地挂载目录做为同步源，请把完整路径映射进来，比如挂载目录为/vol1/1000/CloudNAS，那么映射路径是：
   - /vol1/1000/CloudNAS:/vol1/1000/CloudNAS
