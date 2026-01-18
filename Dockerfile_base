@@ -1,0 +1,27 @@
+# 构建阶段
+FROM golang:1.25.0-alpine
+# 备份并替换软件源文件为阿里云源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+# 更新软件包索引（这是关键步骤，不要遗漏）
+RUN apk update
+# 安装依赖
+RUN apk add --no-cache \
+    git \
+    make \
+    gcc \
+    musl-dev \
+    curl \
+    wget \
+    tzdata build-base ffmpeg sudo \
+    postgresql15-jit postgresql15-client bash tzdata inotify-tools ca-certificates
+# 安装依赖
+RUN rm -rf /var/cache/apk/*
+# 设置时区
+RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+# 设置时区
+ENV TZ=Asia/Shanghai
+# 设置工作目录
+WORKDIR /workspace
+
+# 启动命令
+CMD ["/bin/sh"]

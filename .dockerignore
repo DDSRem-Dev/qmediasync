@@ -1,0 +1,16 @@
+.git
+.github
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+*.log
+data/*
+config/logs/*
+.env
+.env.local
+node_modules
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
