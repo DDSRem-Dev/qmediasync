@@ -65,7 +65,7 @@ sudo ./build_and_release.sh -v vx.xx.xx
 
 ## Star
 
-[![Star History Chart](https://api.star-history.com/svg?repos=qicfan/qmediasync&type=Date)](https://star-history.com/#qicfan/qmediasync&Date)
+![Star History](https://api.star-history.com/svg?repos=username/repo&type=Date)
 
 ## 请作者喝杯咖啡
 
