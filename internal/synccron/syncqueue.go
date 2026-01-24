@@ -21,14 +21,22 @@ type SyncProcessor struct {
 		id       uint
 		taskType SyncTaskType
 	}
-	running          bool
-	activedProcessor bool
-	waitingQueue     map[string]uint // 等待队列（syncID集合）
-	currentTaskId    uint            // 当前正在运行的任务ID，0表示无任务
-	currentTaskType  SyncTaskType    // 当前正在运行的任务类型
-	Lock             sync.Mutex
-	scrapeInstance   *scrape.Scrape // 正在运行的刮削目录
-	strmSync         *models.Sync   // 正在运行的STRM同步任务
+	running         bool
+	waitingQueue    map[string]uint // 等待队列（syncID集合）
+	currentTaskId   uint            // 当前正在运行的任务ID，0表示无任务
+	currentTaskType SyncTaskType    // 当前正在运行的任务类型
+	currentTaskLock sync.Mutex
+	Lock            sync.Mutex
+	scrapeInstance  *scrape.Scrape // 正在运行的刮削目录
+	strmSync        *models.Sync   // 正在运行的STRM同步任务
+}
+
+func (sp *SyncProcessor) resetCurrentTask(taskId uint, taskType SyncTaskType) bool {
+	sp.currentTaskLock.Lock()
+	defer sp.currentTaskLock.Unlock()
+	sp.currentTaskId = taskId
+	sp.currentTaskType = taskType
+	return true
 }
 
 // 处理同步任务的协程
@@ -39,29 +47,34 @@ func (sp *SyncProcessor) process() {
 		if !ok {
 			break
 		}
-		// 标记当前任务
-		sp.currentTaskId = task.id
-		sp.currentTaskType = task.taskType
+		sp.Lock.Lock()
+		// 如果等待队列中不存在，则表示任务已被取消，跳过处理
+		if _, exists := sp.waitingQueue[fmt.Sprintf("%d-%s", task.id, task.taskType)]; !exists {
+			helpers.AppLogger.Infof("同步任务已被取消，跳过处理: 类型=%s, ID=%d", task.taskType, task.id)
+			sp.Lock.Unlock()
+			continue
+		}
+		sp.Lock.Unlock()
+		sp.resetCurrentTask(task.id, task.taskType)
 		// 从等待队列移除
+		sp.Lock.Lock()
 		delete(sp.waitingQueue, fmt.Sprintf("%d-%s", task.id, task.taskType))
+		sp.Lock.Unlock()
 		helpers.AppLogger.Infof("开始处理同步任务: 类型=%s, ID=%d", task.taskType, task.id)
 		sp.handleSyncTask(task.id, task.taskType)
 		// 任务处理完毕，清空当前任务
-		sp.currentTaskId = 0
-		sp.currentTaskType = ""
+		sp.resetCurrentTask(0, "")
 	}
 	helpers.AppLogger.Info("同步任务处理协程已停止")
 }
 
 // 处理单个同步任务
 func (sp *SyncProcessor) handleSyncTask(id uint, taskType SyncTaskType) {
-	sp.activedProcessor = true
 	if taskType == SyncTaskTypeStrm {
 		// 从数据库获取同步任务
 		syncPath := models.GetSyncPathById(id)
 		if syncPath == nil {
 			helpers.AppLogger.Errorf("获取同步目录失败， ID=%d", id)
-			sp.activedProcessor = false
 			return
 		}
 
@@ -72,30 +85,33 @@ func (sp *SyncProcessor) handleSyncTask(id uint, taskType SyncTaskType) {
 			helpers.AppLogger.Error("创建同步任务失败")
 			return
 		}
+		defer func() {
+			sp.strmSync = nil
+		}()
+		// time.Sleep(5 * time.Minute)
 		// 执行同步任务（单协程并发1）
 		if success := sp.strmSync.Start(); success {
 			helpers.AppLogger.Infof("同步任务执行成功: 同步目录ID=%d", id)
 		}
-		sp.strmSync = nil
 	}
 	if taskType == SyncTaskTypeScrape {
 		// 从数据库获取刮削任务
 		scrapePath := models.GetScrapePathByID(id)
 		if scrapePath == nil {
 			helpers.AppLogger.Errorf("获取刮削目录失败， ID=%d", id)
-			sp.activedProcessor = false
 			return
 		}
 
 		helpers.AppLogger.Infof("开始执行刮削任务: 刮削目录ID=%d", id)
 		// 执行刮削任务（单协程并发1）
 		sp.scrapeInstance = scrape.NewScrape(scrapePath)
+		defer func() {
+			sp.scrapeInstance = nil
+		}()
 		if success := sp.scrapeInstance.Start(); success {
 			helpers.AppLogger.Infof("刮削任务执行成功: 刮削目录ID=%d", id)
 		}
-		sp.scrapeInstance = nil
 	}
-	sp.activedProcessor = false
 }
 
 var sync115Processor *SyncProcessor
@@ -114,10 +130,12 @@ func InitSyncProcessor(sourceType models.SourceType) *SyncProcessor {
 				id       uint
 				taskType SyncTaskType
 			}, 10), // 缓冲队列，最多20个待处理任务
-			running:       true,
-			waitingQueue:  make(map[string]uint),
-			currentTaskId: 0,
-			Lock:          sync.Mutex{},
+			running:         true,
+			waitingQueue:    make(map[string]uint),
+			currentTaskId:   0,
+			currentTaskType: "",
+			currentTaskLock: sync.Mutex{},
+			Lock:            sync.Mutex{},
 		}
 		// 启动处理协程
 		go sync115Processor.process()
@@ -133,10 +151,11 @@ func InitSyncProcessor(sourceType models.SourceType) *SyncProcessor {
 				id       uint
 				taskType SyncTaskType
 			}, 10), // 缓冲队列，最多20个待处理任务
-			running:       true,
-			waitingQueue:  make(map[string]uint),
-			currentTaskId: 0,
-			Lock:          sync.Mutex{},
+			running:         true,
+			waitingQueue:    make(map[string]uint),
+			currentTaskId:   0,
+			currentTaskLock: sync.Mutex{},
+			Lock:            sync.Mutex{},
 		}
 		// 启动处理协程
 		go openlistSyncProcessor.process()
@@ -151,10 +170,11 @@ func InitSyncProcessor(sourceType models.SourceType) *SyncProcessor {
 				id       uint
 				taskType SyncTaskType
 			}, 10), // 缓冲队列，最多20个待处理任务
-			running:       true,
-			waitingQueue:  make(map[string]uint),
-			currentTaskId: 0,
-			Lock:          sync.Mutex{},
+			running:         true,
+			waitingQueue:    make(map[string]uint),
+			currentTaskId:   0,
+			currentTaskLock: sync.Mutex{},
+			Lock:            sync.Mutex{},
 		}
 		// 启动处理协程
 		go localSyncProcessor.process()
@@ -194,7 +214,7 @@ func AddSyncTask(id uint, taskType SyncTaskType) error {
 	}
 	// 判断队列是否已满
 	if len(processor.taskChan) >= cap(processor.taskChan) {
-		helpers.AppLogger.Errorf("同步任务队列已满，无法添加任务: 类型=%s, ID=%d", taskType, id)
+		err = fmt.Sprintf("同步任务队列已满，无法添加任务: 类型=%s, ID=%d", taskType, id)
 	}
 	processor.Lock.Unlock()
 	if err != "" {
@@ -210,10 +230,15 @@ func AddSyncTask(id uint, taskType SyncTaskType) error {
 	}{id, taskType}
 	processor.Lock.Unlock()
 	// 如果队列没有执行则触发一次执行
+	helpers.AppLogger.Debugf("当前同步任务队列长度: %d/%d, 当前执行的任务ID：%d， 任务类型：%s", len(processor.taskChan), cap(processor.taskChan), processor.currentTaskId, processor.currentTaskType)
+	processor.currentTaskLock.Lock()
+	defer processor.currentTaskLock.Unlock()
 	if processor.currentTaskId == 0 {
 		go processor.process()
+	} else {
+		helpers.AppLogger.Infof("同步任务已添加到等待队列: 类型=%s, ID=%d", taskType, id)
 	}
-	// helpers.Log.Info("同步任务已添加到队列: 类型=%s, ID=%d", taskType, id)
+
 	return nil
 }
 
@@ -272,9 +297,13 @@ func CheckTaskIsRunning(id uint, taskType SyncTaskType) int {
 		return 0
 	}
 	key := fmt.Sprintf("%d-%s", id, taskType)
+	processor.Lock.Lock()
+	defer processor.Lock.Unlock()
 	if _, exists := processor.waitingQueue[key]; exists {
 		return 1
 	}
+	processor.currentTaskLock.Lock()
+	defer processor.currentTaskLock.Unlock()
 	if processor.currentTaskId == id && processor.currentTaskType == taskType {
 		return 2
 	}

@@ -27,3 +27,5 @@ release_body.txt
 test_guid.sh
 q115strm_test.exe
 q115strm.exe
+/config/backups
+docs/FeHelper-20260123203742.json

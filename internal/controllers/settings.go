@@ -9,37 +9,37 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func UpdateEmby(c *gin.Context) {
-	type updateEmbyRequest struct {
-		EmbyUrl    string `form:"emby_url" json:"emby_url"`         // Emby Url
-		EmbyApiKey string `form:"emby_api_key" json:"emby_api_key"` // Emby API Key
-	}
-	// 获取请求参数
-	var req updateEmbyRequest
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, APIResponse[any]{Code: BadRequest, Message: "请求参数错误: " + err.Error(), Data: nil})
-		return
-	}
-	// 更新设置
-	if !models.SettingsGlobal.UpdateEmbyUrl(req.EmbyUrl, req.EmbyApiKey) {
-		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "更新Emby Url失败", Data: nil})
-		return
-	}
+// func UpdateEmby(c *gin.Context) {
+// 	type updateEmbyRequest struct {
+// 		EmbyUrl    string `form:"emby_url" json:"emby_url"`         // Emby Url
+// 		EmbyApiKey string `form:"emby_api_key" json:"emby_api_key"` // Emby API Key
+// 	}
+// 	// 获取请求参数
+// 	var req updateEmbyRequest
+// 	if err := c.ShouldBind(&req); err != nil {
+// 		c.JSON(http.StatusBadRequest, APIResponse[any]{Code: BadRequest, Message: "请求参数错误: " + err.Error(), Data: nil})
+// 		return
+// 	}
+// 	// 更新设置
+// 	if !models.SettingsGlobal.UpdateEmbyUrl(req.EmbyUrl, req.EmbyApiKey) {
+// 		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "更新Emby Url失败", Data: nil})
+// 		return
+// 	}
 
-	c.JSON(http.StatusOK, APIResponse[any]{Code: Success, Message: "更新Emby Url成功", Data: nil})
-}
+// 	c.JSON(http.StatusOK, APIResponse[any]{Code: Success, Message: "更新Emby Url成功", Data: nil})
+// }
 
-func GetEmby(c *gin.Context) {
-	// 获取设置
-	models.LoadSettings() // 确保设置已加载
-	emby := make(map[string]string)
-	emby["emby_url"] = models.SettingsGlobal.EmbyUrl
-	emby["emby_api_key"] = models.SettingsGlobal.EmbyApiKey
-	c.JSON(http.StatusOK, APIResponse[any]{Code: Success, Message: "获取Emby设置成功", Data: emby})
-}
+// func GetEmby(c *gin.Context) {
+// 	// 获取设置
+// 	models.LoadSettings() // 确保设置已加载
+// 	emby := make(map[string]string)
+// 	emby["emby_url"] = models.GlobalEmbyConfig.EmbyUrl
+// 	emby["emby_api_key"] = models.GlobalEmbyConfig.EmbyApiKey
+// 	c.JSON(http.StatusOK, APIResponse[any]{Code: Success, Message: "获取Emby设置成功", Data: emby})
+// }
 
 func ParseEmby(c *gin.Context) {
-	if models.SettingsGlobal.EmbyUrl == "" || models.SettingsGlobal.EmbyApiKey == "" {
+	if models.GlobalEmbyConfig.EmbyUrl == "" || models.GlobalEmbyConfig.EmbyApiKey == "" {
 		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "Emby Url和Emby API Key没有填写，无法提取媒体信息", Data: nil})
 		return
 	}

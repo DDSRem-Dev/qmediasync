@@ -56,8 +56,28 @@ type UserDto struct {
 type BaseItemDtoV2 struct {
 	Name string `json:"Name,omitempty"`
 	// The id.
-	Id           string          `json:"Id,omitempty"`
-	MediaStreams []MediaStreamV2 `json:"MediaStreams,omitempty"`
+	Id                string          `json:"Id,omitempty"`
+	MediaStreams      []MediaStreamV2 `json:"MediaStreams,omitempty"`
+	Type              string          `json:"Type,omitempty"`
+	ParentId          string          `json:"ParentId,omitempty"`
+	SeriesId          string          `json:"SeriesId,omitempty"`
+	SeriesName        string          `json:"SeriesName,omitempty"`
+	SeasonId          string          `json:"SeasonId,omitempty"`
+	SeasonName        string          `json:"SeasonName,omitempty"`
+	Path              string          `json:"Path,omitempty"`
+	IndexNumber       int             `json:"IndexNumber,omitempty"`
+	ParentIndexNumber int             `json:"ParentIndexNumber,omitempty"`
+	ProductionYear    int             `json:"ProductionYear,omitempty"`
+	PremiereDate      string          `json:"PremiereDate,omitempty"`
+	DateCreated       string          `json:"DateCreated,omitempty"`
+	DateModified      string          `json:"DateModified,omitempty"`
+	IsFolder          bool            `json:"IsFolder,omitempty"`
+	MediaSources      []MediaSource   `json:"MediaSources,omitempty"`
+}
+
+type MediaSource struct {
+	Path string `json:"Path,omitempty"`
+	Name string `json:"Name,omitempty"`
 }
 
 type MediaStreamV2 struct {
@@ -294,12 +314,17 @@ func (c *Client) GetUsersWithAllLibrariesAccess() ([]UserDto, error) {
 	return usersWithAllAccess, nil
 }
 
-// // 获取媒体详情
-// func (c *Client) GetMediaItemDetails(userId, itemID string) (*BaseItemDtoV2, error) {
-// 	// Construct the request URL
-// 	url := fmt.Sprintf("%s/emby/Users/%s/Items/%s?api_key=%s&Fields=MediaStreams", c.embyURL, userId, itemID, c.apiKey)
-
-// }
+// 刷新媒体库
+func (c *Client) RefreshLibrary(libraryId string, libraryName string) error {
+	// Construct the request URL
+	url := fmt.Sprintf("%s/emby/Items/%s/Refresh?api_key=%s&Fields=MediaStreams", c.embyURL, libraryId, c.apiKey)
+	err := helpers.PostUrl(url)
+	if err != nil {
+		return err
+	}
+	helpers.AppLogger.Infof("已触发Emby媒体库 %s => %s 刷新", libraryId, libraryName)
+	return nil
+}
 
 // 刷新所有媒体库媒体流数据
 func ProcessLibraries(embyURL, apiKey string, excludeIds []string) []map[string]string {
@@ -347,8 +372,6 @@ func ProcessLibraries(embyURL, apiKey string, excludeIds []string) []map[string]
 		}
 
 		helpers.AppLogger.Infof("在 '%s' 中找到 %d 个影视剧", lib.Name, len(items))
-		// var wg sync.WaitGroup
-		// sem := make(chan struct{}, 5) // 创建一个容量为 3 的信号量
 		//处理数据量
 
 		for _, item := range items {
@@ -361,11 +384,6 @@ func ProcessLibraries(embyURL, apiKey string, excludeIds []string) []map[string]
 			}
 			if nonSubtitleStreamCount < 2 {
 				sum++
-				// wg.Add(1)
-				// sem <- struct{}{} // 获取一个信号量，如果通道已满则阻塞
-				// go func(item BaseItemDtoV2) {
-				// 	defer wg.Done()
-				// 	defer func() { <-sem }() // 释放信号量
 				// 检查每个媒体项目的播放信息
 				url := fmt.Sprintf("%s/emby/Items/%s/PlaybackInfo?api_key=%s", embyURL, item.Id, apiKey)
 				task := make(map[string]string)
@@ -373,69 +391,9 @@ func ProcessLibraries(embyURL, apiKey string, excludeIds []string) []map[string]
 				task["item_id"] = item.Id
 				task["item_name"] = item.Name
 				tasks = append(tasks, task)
-				// helpers.AppLogger.Infof("添加任务 %s : %s => %s 到队列", item.Id, item.Name, url)
-				// err := client.CheckPlaybackInfo(item, userID)
-				// if err != nil {
-				// 	log.Printf("检查项目 %s 的播放信息失败: %v", item.Name, err)
-				// }
-				// }(item)
 			}
 		}
 		// wg.Wait()
 	}
 	return tasks
 }
-
-// // 根据媒体库id刷新媒体流数据
-// func ProcessLibrariesById(embyURL, apiKey, libId string) {
-// 	// 创建一个新的 Emby 客户端
-// 	client := NewClient(embyURL, apiKey)
-// 	// 获取有权限的用户
-// 	users, err := client.GetUsersWithAllLibrariesAccess()
-// 	if err != nil {
-// 		helpers.AppLogger.Errorf("获取用户失败: %v", err)
-// 		return
-// 	}
-// 	if len(users) == 0 {
-// 		helpers.AppLogger.Errorf("没有找到可以访问所有媒体库的用户")
-// 		return
-// 	}
-// 	// 使用第一个有权限的用户
-// 	userID := users[0].ID
-// 	helpers.AppLogger.Infof("使用用户 '%s' (ID: %s) 来检查影视剧的媒体信息", users[0].Name, userID)
-
-// 	items, err := client.GetMediaItemsByLibraryID(libId)
-// 	if err != nil {
-// 		helpers.AppLogger.Errorf("获取媒体库 '%s' 中的影视剧失败: %v", libId, err)
-// 	}
-
-// 	fmt.Printf("在 '%s' 中找到 %d 个媒体项:\n", libId, len(items))
-// 	var wg sync.WaitGroup
-// 	sem := make(chan struct{}, 5) // 创建一个容量为 3 的信号量
-// 	//处理数据量
-// 	sum := 0
-// 	for _, item := range items {
-// 		nonSubtitleStreamCount := 0
-// 		for _, stream := range item.MediaStreams {
-// 			if stream.Type != "Subtitle" {
-// 				nonSubtitleStreamCount++
-// 			}
-// 		}
-// 		if nonSubtitleStreamCount < 2 {
-// 			sum++
-// 			wg.Add(1)
-// 			sem <- struct{}{} // 获取一个信号量，如果通道已满则阻塞
-// 			go func(item BaseItemDtoV2) {
-// 				defer wg.Done()
-// 				defer func() { <-sem }() // 释放信号量
-// 				// 检查每个媒体项目的播放信息
-// 				err := client.CheckPlaybackInfo(item, userID)
-// 				if err != nil {
-// 					log.Printf("检查项目 %s 的播放信息失败: %v", item.Name, err)
-// 				}
-// 			}(item)
-// 		}
-// 	}
-// 	wg.Wait()
-// 	log.Printf("=========一共处理数据量%d============", sum)
-// }

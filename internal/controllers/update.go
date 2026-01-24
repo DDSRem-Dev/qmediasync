@@ -342,7 +342,7 @@ func triggerUpdate() {
 		return
 	}
 	helpers.AppLogger.Infof("触发更新脚本: %s", batFile)
-	cmd := exec.Command("cmd.exe", "/C", batFile)
+	cmd := exec.Command(batFile)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

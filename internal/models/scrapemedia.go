@@ -842,8 +842,8 @@ func (sm *ScrapeMediaFile) ExtractSeasonEpisode(sp *ScrapePath) error {
 	pathPartCount := strings.Count(relSeasonPath, string(os.PathSeparator))
 	seasonFolderNumber := helpers.ExtractSeasonsFromSeasonPath(filepath.Base(sm.TvshowPath))
 	helpers.AppLogger.Infof("季相对目录: %s", relSeasonPath)
-	helpers.AppLogger.Infof("识别到的季编号：%d", seasonFolderNumber)
-	if seasonFolderNumber >= 0 && pathPartCount >= 2 {
+	helpers.AppLogger.Infof("识别到的季编号：%d, 路径切片数量：%d", seasonFolderNumber, pathPartCount)
+	if seasonFolderNumber >= 0 && pathPartCount >= 1 {
 		// 有季文件夹
 		sm.Path = sm.TvshowPath
 		sm.PathId = sm.TvshowPathId
@@ -1388,4 +1388,28 @@ func GetAllEpisodeByTvshow(mediaId uint, batchNo string) []*ScrapeMediaFile {
 	var scrapeMediaFiles []*ScrapeMediaFile
 	db.Db.Model(&ScrapeMediaFile{}).Where("media_id = ? AND batch_no = ?", mediaId, batchNo).Find(&scrapeMediaFiles)
 	return scrapeMediaFiles
+}
+
+// TruncateAllScrapeRecords 清空所有刮削记录
+// 使用TRUNCATE命令清空ScrapeMediaFile、Media、MediaSeason、MediaEpisode四张表
+func TruncateAllScrapeRecords() error {
+	// 按顺序TRUNCATE表，注意外键依赖关系
+	// 先清空子表（MediaEpisode, MediaSeason），再清空父表（Media），最后清空ScrapeMediaFile
+	tables := []string{
+		"media_episodes",
+		"media_seasons",
+		"media",
+		"scrape_media_files",
+	}
+
+	for _, tableName := range tables {
+		if err := db.Db.Exec(fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE", tableName)).Error; err != nil {
+			helpers.AppLogger.Errorf("清空表 %s 失败: %v", tableName, err)
+			return fmt.Errorf("清空表 %s 失败: %v", tableName, err)
+		}
+		helpers.AppLogger.Infof("清空表 %s 成功", tableName)
+	}
+
+	helpers.AppLogger.Info("清空所有刮削记录成功")
+	return nil
 }

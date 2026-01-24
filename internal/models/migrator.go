@@ -28,7 +28,7 @@ func (*Migrator) TableName() string {
 func Migrate() {
 	dbFile := filepath.Join(helpers.RootDir, helpers.GlobalConfig.Db.File)
 	sqliteDb := db.GetDb(dbFile)
-	maxVersion := 11
+	maxVersion := 13
 	if sqliteDb != nil {
 		// 从sqlite迁移数据到postgres
 		moveSqliteToPostres(sqliteDb, maxVersion)
@@ -246,6 +246,15 @@ func Migrate() {
 		}
 		migrator.UpdateVersionCode(db.Db)
 	}
+	if migrator.VersionCode == 12 {
+		// 备份相关表 + Emby同步相关表
+		db.Db.AutoMigrate(
+			BackupConfig{}, BackupRecord{},
+			EmbyConfig{}, EmbyMediaItem{}, EmbyMediaSyncFile{}, EmbyLibrary{}, EmbyLibrarySyncPath{},
+		)
+		migrateEmbyConfig(db.Db)
+		migrator.UpdateVersionCode(db.Db)
+	}
 	helpers.AppLogger.Infof("当前数据库版本 %d", migrator.VersionCode)
 }
 
@@ -257,6 +266,10 @@ func BatchCreateTable() {
 	db.Db.AutoMigrate(SyncFile{}, Sync115Path{})
 	// 刮削相关表
 	db.Db.AutoMigrate(ScrapeSettings{}, ScrapePath{}, MovieCategory{}, TvShowCategory{}, ScrapePathCategory{}, ScrapeMediaFile{}, Media{}, MediaSeason{}, MediaEpisode{})
+	// 备份相关表
+	db.Db.AutoMigrate(BackupConfig{}, BackupTask{}, BackupRecord{}, RestoreTask{})
+	// Emby 同步相关表
+	db.Db.AutoMigrate(EmbyConfig{}, EmbyMediaItem{}, EmbyMediaSyncFile{}, EmbyLibrary{}, EmbyLibrarySyncPath{})
 	// 下载队列
 	db.Db.AutoMigrate(DbDownloadTask{}, DbUploadTask{})
 	// 通知渠道表
@@ -386,23 +399,23 @@ func moveSqliteToPostres(sqliteDb *gorm.DB, version int) {
 	var settings Settings
 	sqliteDb.Find(&settings)
 	newSettings := Settings{
-		UseTelegram:       settings.UseTelegram,
-		TelegramBotToken:  settings.TelegramBotToken,
-		TelegramChatId:    settings.TelegramChatId,
-		MeoWName:          settings.MeoWName,
-		HttpProxy:         settings.HttpProxy,
-		StrmBaseUrl:       settings.StrmBaseUrl,
-		Cron:              settings.Cron,
-		MetaExt:           settings.MetaExt,
-		VideoExt:          settings.VideoExt,
-		MinVideoSize:      settings.MinVideoSize,
-		UploadMeta:        settings.UploadMeta,
-		DownloadMeta:      settings.DownloadMeta,
-		DeleteDir:         settings.DeleteDir,
-		LocalProxy:        settings.LocalProxy,
-		ExcludeName:       settings.ExcludeName,
-		EmbyUrl:           settings.EmbyUrl,
-		EmbyApiKey:        settings.EmbyApiKey,
+		UseTelegram:      settings.UseTelegram,
+		TelegramBotToken: settings.TelegramBotToken,
+		TelegramChatId:   settings.TelegramChatId,
+		MeoWName:         settings.MeoWName,
+		HttpProxy:        settings.HttpProxy,
+		StrmBaseUrl:      settings.StrmBaseUrl,
+		Cron:             settings.Cron,
+		MetaExt:          settings.MetaExt,
+		VideoExt:         settings.VideoExt,
+		MinVideoSize:     settings.MinVideoSize,
+		UploadMeta:       settings.UploadMeta,
+		DownloadMeta:     settings.DownloadMeta,
+		DeleteDir:        settings.DeleteDir,
+		LocalProxy:       settings.LocalProxy,
+		ExcludeName:      settings.ExcludeName,
+		// EmbyUrl:           settings.EmbyUrl,
+		// EmbyApiKey:        settings.EmbyApiKey,
 		DownloadThreads:   settings.DownloadThreads,
 		FileDetailThreads: settings.FileDetailThreads,
 	}
@@ -676,6 +689,26 @@ func InitScrapeSetting() {
 	} else {
 		helpers.AppLogger.Info("已默认添加纪录片分类")
 	}
+}
+
+func migrateEmbyConfig(dbConn *gorm.DB) {
+	var count int64
+	if err := dbConn.Model(&EmbyConfig{}).Count(&count).Error; err != nil {
+		return
+	}
+	if count > 0 {
+		return
+	}
+	var settings Settings
+	if err := dbConn.First(&settings).Error; err != nil {
+		return
+	}
+	config := &EmbyConfig{
+		EmbyUrl:    settings.EmbyUrl,
+		EmbyApiKey: settings.EmbyApiKey,
+		SyncCron:   settings.Cron,
+	}
+	dbConn.Create(config)
 }
 
 // migrateExistingNotificationSettings 迁移现有的通知设置

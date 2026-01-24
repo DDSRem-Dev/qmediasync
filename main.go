@@ -169,6 +169,8 @@ func (app *App) StartDatabase() error {
 		return err
 	}
 	db.InitDb(app.dbManager.GetDB())
+	// 设置全局管理器引用供其他包使用
+	db.Manager = app.dbManager
 	// 开始数据库版本维护
 	models.Migrate()
 	return nil
@@ -233,7 +235,11 @@ func StartEmby302() {
 	if err := config.ReadFromFile([]byte(s)); err != nil {
 		log.Fatal(err)
 	}
-	config.C.Emby.Host = models.SettingsGlobal.EmbyUrl
+	if models.GlobalEmbyConfig == nil || models.GlobalEmbyConfig.EmbyUrl == "" {
+		helpers.AppLogger.Warnf("Emby302未配置Emby地址，跳过启动emby302服务")
+		return
+	}
+	config.C.Emby.Host = models.GlobalEmbyConfig.EmbyUrl
 	config.C.Emby.EpisodesUnplayPrior = false // 关闭剧集排序
 	certFile := filepath.Join(helpers.RootDir, "config", "server.crt")
 	keyFile := filepath.Join(helpers.RootDir, "config", "server.key")
@@ -273,11 +279,14 @@ func InitOthers() {
 	models.InitDQ()                  // 初始化下载队列
 	models.InitUQ()                  // 初始化上传队列
 	models.InitNotificationManager() // 初始化通知管理器
+	models.GetEmbyConfig()           // 加载Emby配置
 	// helpers.SubscribeSync(helpers.Save115TokenEvent, models.HandleOpen115TokenSaveSync)
 	helpers.SubscribeSync(helpers.V115TokenInValidEvent, models.HandleV115TokenInvalid)
 	helpers.SubscribeSync(helpers.SaveOpenListTokenEvent, models.HandleOpenListTokenSaveSync)
 	models.FailAllRunningSyncTasks() // 将所有运行中的同步任务设置为失败状态
 	synccron.Refresh115AccessToken() // 启动时刷新一次115的访问凭证，防止有过期的token导致同步失败
+	// 清理应用启动时的未完成备份任务
+	cleanupIncompleteBackupTasks()
 	// if helpers.IsRelease {
 	synccron.InitCron() // 初始化定时任务
 	// }
@@ -364,11 +373,17 @@ func setRouter(r *gin.Engine) {
 		api.GET("/setting/strm-config", controllers.GetStrmConfig)                                 // 获取STRM配置
 		api.POST("/setting/strm-config", controllers.UpdateStrmConfig)                             // 更新STRM配置
 		api.GET("/setting/cron", controllers.GetCronNextTime)                                      // 获取Cron表达式的下5次执行时间
-		api.POST("/setting/emby", controllers.UpdateEmby)                                          // 更新Emby配置
-		api.GET("/setting/emby", controllers.GetEmby)                                              // 获取Emby配置
 		api.POST("/setting/emby/parse", controllers.ParseEmby)                                     // 解析Emby媒体信息
+		api.GET("/setting/emby-config", controllers.GetEmbyConfig)                                 // 获取新的Emby配置
+		api.POST("/setting/emby-config", controllers.UpdateEmbyConfig)                             // 更新新的Emby配置
 		api.POST("/setting/threads", controllers.UpdateThreads)                                    // 更新线程数
 		api.GET("/setting/threads", controllers.GetThreads)                                        // 获取线程数
+		api.POST("/emby/sync/start", controllers.StartEmbySync)                                    // 手动启动Emby同步
+		api.GET("/emby/sync/status", controllers.GetEmbySyncStatus)                                // 获取Emby同步状态
+		api.GET("/emby/media", controllers.GetEmbyMediaItems)                                      // 分页获取Emby媒体项
+		api.GET("/emby/library-sync-paths", controllers.GetEmbyLibrarySyncPaths)                   // 获取媒体库与同步目录关联
+		api.POST("/emby/library-sync-paths", controllers.UpdateEmbyLibrarySyncPath)                // 更新媒体库与同步目录关联
+		api.DELETE("/emby/library-sync-paths", controllers.DeleteEmbyLibrarySyncPath)              // 删除媒体库与同步目录关联
 		api.POST("/sync/start", controllers.StartSync)                                             // 启动同步
 		api.GET("/sync/records", controllers.GetSyncRecords)                                       // 同步列表
 		api.GET("/sync/task", controllers.GetSyncTask)                                             // 获取同步任务详情
@@ -411,6 +426,7 @@ func setRouter(r *gin.Engine) {
 		api.GET("/scrape/records", controllers.GetScrapeRecords)                                   // 获取刮削记录
 		api.POST("/scrape/re-scrape", controllers.ReScrape)                                        // 重新刮削记录
 		api.POST("/scrape/clear-failed", controllers.ClearFailedScrapeRecords)                     // 清除所有刮削失败的记录
+		api.POST("/scrape/truncate-all", controllers.TruncateAllScrapeRecords)                     // 一键清空所有刮削记录
 		api.DELETE("/scrape/records", controllers.DeleteScrapeMediaFile)                           // 删除刮削记录
 		api.POST("/scrape/finish", controllers.FinishScrapeMediaFile)                              // 完成刮削记录
 		api.POST("/scrape/rename-failed", controllers.RenameFailedScrapeMediaFile)                 // 标记所有失败的记录为待整理
@@ -428,6 +444,19 @@ func setRouter(r *gin.Engine) {
 		api.POST("/download/queue/stop", controllers.StopDownloadQueue)                                  // 停止下载队列
 		api.GET("/download/queue/status", controllers.DownloadQueueStatus)                               // 查询下载队列状态
 		api.POST("/download/queue/clear-success-failed", controllers.ClearDownloadSuccessAndFailedTasks) // 清除下载队列中已完成和失败的任务
+
+		// 数据库备份和恢复接口
+		api.GET("/database/backup-config", controllers.GetBackupConfig)            // 获取备份配置
+		api.POST("/database/backup-config", controllers.UpdateBackupConfig)        // 更新备份配置
+		api.POST("/database/backup/start", controllers.StartBackupTask)            // 启动备份任务
+		api.POST("/database/backup/cancel", controllers.CancelBackupTask)          // 取消备份任务
+		api.GET("/database/backup/progress", controllers.GetBackupProgress)        // 查询备份进度
+		api.POST("/database/restore", controllers.RestoreDatabase)                 // 恢复数据库
+		api.GET("/database/restore/progress", controllers.GetRestoreProgress)      // 查询恢复进度
+		api.GET("/database/backups", controllers.ListBackups)                      // 列出所有备份文件
+		api.DELETE("/database/backup", controllers.DeleteBackup)                   // 删除单个备份文件
+		api.POST("/database/backup-record/delete", controllers.DeleteBackupRecord) // 删除备份记录
+		api.GET("/database/backup-records", controllers.GetBackupRecords)          // 获取备份历史记录
 	}
 }
 
@@ -488,5 +517,52 @@ func main() {
 		})
 	} else {
 		QMSApp.Start()
+	}
+}
+
+// cleanupIncompleteBackupTasks 清理应用启动时的未完成备份任务
+func cleanupIncompleteBackupTasks() {
+	// 查找所有未完成的备份任务
+	var tasks []*models.BackupTask
+	if err := db.Db.Where("status = ?", "running").Find(&tasks).Error; err != nil {
+		helpers.AppLogger.Errorf("查询未完成的备份任务失败: %v", err)
+		return
+	}
+
+	for _, task := range tasks {
+		// 标记为失败
+		if err := db.Db.Model(task).Updates(map[string]interface{}{
+			"status":         "failed",
+			"end_time":       time.Now().Unix(),
+			"failure_reason": "应用重启导致任务中断",
+		}).Error; err != nil {
+			helpers.AppLogger.Errorf("更新备份任务状态失败: %v", err)
+		}
+
+		// 清理临时文件
+		if task.FilePath != "" {
+			config := &models.BackupConfig{}
+			db.Db.First(config)
+			if config.ID > 0 {
+				backupDir := filepath.Join(helpers.RootDir, config.BackupPath)
+				os.Remove(filepath.Join(backupDir, task.FilePath))
+				os.Remove(filepath.Join(backupDir, task.FilePath+".gz"))
+			}
+		}
+
+		helpers.AppLogger.Infof("已清理未完成的备份任务，任务ID: %d", task.ID)
+	}
+
+	// 检查维护模式是否需要恢复
+	config := &models.BackupConfig{}
+	if err := db.Db.First(config).Error; err == nil {
+		if config.MaintenanceMode == 1 {
+			// 自动退出维护模式
+			db.Db.Model(config).Updates(map[string]interface{}{
+				"maintenance_mode":      0,
+				"maintenance_mode_time": 0,
+			})
+			helpers.AppLogger.Info("应用启动时已自动退出维护模式")
+		}
 	}
 }

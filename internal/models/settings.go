@@ -1,7 +1,6 @@
 package models
 
 import (
-	"Q115-STRM/emby302/config"
 	"Q115-STRM/internal/db"
 	"Q115-STRM/internal/helpers"
 	"Q115-STRM/internal/notificationmanager"
@@ -102,22 +101,22 @@ func (settings *Settings) UpdateHttpProxy(httpProxy string) bool {
 	return true
 }
 
-func (settings *Settings) UpdateEmbyUrl(embyUrl string, embyApiKey string) bool {
-	settings.EmbyUrl = embyUrl
-	settings.EmbyApiKey = embyApiKey
-	updateData := make(map[string]interface{})
-	updateData["emby_url"] = embyUrl
-	updateData["emby_api_key"] = embyApiKey
-	err := db.Db.Model(settings).Where("id = ?", settings.ID).Updates(updateData).Error
-	if err != nil {
-		helpers.AppLogger.Errorf("更新Emby地址失败: %v", err)
-		return false
-	}
-	if config.C != nil {
-		config.C.Emby.Host = embyUrl // 更新emby302反代的配置
-	}
-	return true
-}
+// func (settings *Settings) UpdateEmbyUrl(embyUrl string, embyApiKey string) bool {
+// 	settings.EmbyUrl = embyUrl
+// 	settings.EmbyApiKey = embyApiKey
+// 	updateData := make(map[string]interface{})
+// 	updateData["emby_url"] = embyUrl
+// 	updateData["emby_api_key"] = embyApiKey
+// 	err := db.Db.Model(settings).Where("id = ?", settings.ID).Updates(updateData).Error
+// 	if err != nil {
+// 		helpers.AppLogger.Errorf("更新Emby地址失败: %v", err)
+// 		return false
+// 	}
+// 	if config.C != nil {
+// 		config.C.Emby.Host = embyUrl // 更新emby302反代的配置
+// 	}
+// 	return true
+// }
 
 func (settings *Settings) UpdateStrm(strmBaseUrl string, cron string, metaExt []string, videoExt []string, minVideoSize int64, uploadMeta int, deleteDir int, localProxy int, excludeName []string, downloadMeta int, addPath int) bool {
 	settings.StrmBaseUrl = strmBaseUrl

@@ -133,6 +133,12 @@ func (s *SyncDriver115) DoSync() error {
 	if compareErr := s.CompareLocalFiles(); compareErr != nil {
 		return compareErr
 	}
+	// 触发刷新Emby媒体库，延迟30s，等待文件下载完成
+	go func() {
+		time.Sleep(30 * time.Second)
+		RefreshEmbyLibraryBySyncPathId(s.Sync.SyncPathId)
+	}()
+
 	return nil
 }
 

@@ -753,3 +753,13 @@ func StopScrape(c *gin.Context) {
 	synccron.StopSyncTask(req.ID, synccron.SyncTaskTypeScrape)
 	c.JSON(http.StatusOK, APIResponse[any]{Code: Success, Message: "操作成功，刮削任务已停止", Data: nil})
 }
+
+// TruncateAllScrapeRecords 一键清空所有刮削记录
+func TruncateAllScrapeRecords(c *gin.Context) {
+	err := models.TruncateAllScrapeRecords()
+	if err != nil {
+		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "清空刮削记录失败: " + err.Error(), Data: nil})
+		return
+	}
+	c.JSON(http.StatusOK, APIResponse[any]{Code: Success, Message: "操作成功，所有刮削记录已清空", Data: nil})
+}

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"Q115-STRM/internal/db/database"
 	"Q115-STRM/internal/helpers"
 	"database/sql"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 )
 
 var Db *gorm.DB
+var Manager *database.Manager // 全局数据库管理器
 
 // 获取一个数据库连接
 func GetDb(dbFile string) *gorm.DB {

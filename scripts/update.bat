@@ -37,7 +37,7 @@ rem 如果备份目录存在，先删除
 if exist "%BACKUP_DIR%" (
     echo 删除旧的备份目录...
     rd /s /q "%BACKUP_DIR%"
-    if %ERRORLEVEL% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo 错误: 删除备份目录失败。
         pause
         exit /b 1
@@ -46,7 +46,7 @@ if exist "%BACKUP_DIR%" (
 
 rem 创建新的备份目录
 mkdir "%BACKUP_DIR%"
-if %ERRORLEVEL% neq 0 (
+if !ERRORLEVEL! neq 0 (
     echo 错误: 创建备份目录失败。
     pause
     exit /b 1
@@ -59,7 +59,7 @@ rem 备份主程序
 if exist "%APP_NAME%" (
     echo 备份 %APP_NAME%...
     copy "%APP_NAME%" "%BACKUP_DIR%\%APP_NAME%" >NUL
-    if %ERRORLEVEL% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo 警告: 备份 %APP_NAME% 失败。
     )
 )
@@ -69,7 +69,7 @@ if exist "web_statics" (
     echo 备份 web_statics 目录...
     mkdir "%BACKUP_DIR%\web_statics"
     xcopy /s /e /i "web_statics" "%BACKUP_DIR%\web_statics" >NUL
-    if %ERRORLEVEL% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo 警告: 备份 web_statics 目录失败。
     )
 )
@@ -79,7 +79,7 @@ if exist "scripts" (
     echo 备份 scripts 目录...
     mkdir "%BACKUP_DIR%\scripts"
     xcopy /s /e /i "scripts" "%BACKUP_DIR%\scripts" >NUL
-    if %ERRORLEVEL% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo 警告: 备份 scripts 目录失败。
     )
 )
@@ -91,7 +91,7 @@ rem 更新主程序
 if exist "%UPDATE_DIR%\%APP_NAME%" (
     echo 更新 %APP_NAME%...
     copy /y "%UPDATE_DIR%\%APP_NAME%" ".\" >NUL
-    if %ERRORLEVEL% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo 错误: 更新 %APP_NAME% 失败。
         pause
         exit /b 1
@@ -108,7 +108,7 @@ if exist "%UPDATE_DIR%\web_statics" (
         rd /s /q "web_statics"
     )
     xcopy /s /e /i "%UPDATE_DIR%\web_statics" "web_statics" >NUL
-    if %ERRORLEVEL% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo 错误: 更新 web_statics 目录失败。
         pause
         exit /b 1
@@ -125,7 +125,7 @@ if exist "%UPDATE_DIR%\scripts" (
         rd /s /q "scripts"
     )
     xcopy /s /e /i "%UPDATE_DIR%\scripts" "scripts" >NUL
-    if %ERRORLEVEL% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo 错误: 更新 scripts 目录失败。
         pause
         exit /b 1

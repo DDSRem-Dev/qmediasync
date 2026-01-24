@@ -256,6 +256,32 @@ func DownloadFile(targetUrl string, filePath string, userAgent string) (err erro
 	return nil
 }
 
+// 给一个url做post请求，不处理返回值
+func PostUrl(targetUrl string) error {
+	// 创建请求并设置User-Agent
+	req, err := http.NewRequest("POST", targetUrl, nil)
+	if err != nil {
+		AppLogger.Errorf("创建 %s 的http POST失败: %v", targetUrl, err)
+		return fmt.Errorf("创建 %s 的http POST失败: %v", targetUrl, err)
+	}
+	// 创建传输对象并配置代理
+	transport := &http.Transport{}
+	// 发送请求 - 禁用自动重定向，改为手动处理
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   60 * time.Second,
+		// 禁用自动重定向，返回最后一个响应
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	_, err = client.Do(req)
+	if err != nil {
+		return fmt.Errorf("发送 %s 的http Post失败: %v", targetUrl, err)
+	}
+	return nil
+}
+
 // DownloadProgressCallback 下载进度回调函数类型
 type DownloadProgressCallback func(bytesRead int64, totalBytes int64)
 
