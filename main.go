@@ -219,13 +219,15 @@ func (app *App) migratePostgresToDataDir() {
 	helpers.AppLogger.Infof("嵌入式PostgreSQL数据迁移到用户数据目录完成")
 	// 检查是否要将config/postgres/data目录下的文件迁移到的用户数据目录
 	// 检查config/postgres/data目录是否存在
-	configDataDir := filepath.Join(helpers.ConfigDir, "postgres", "data")
+	// 迁移到%LOCALAPPDATA%\QMediaSync\postgres\data目录下
+	configDataDir := filepath.Join(helpers.RootDir, "config", "postgres", "data")
+	dataDestDir := filepath.Join(helpers.ConfigDir, "postgres", "data")
 	if helpers.PathExists(configDataDir) {
 		// 检查是否为空
 		entries, err := os.ReadDir(configDataDir)
 		if err == nil && len(entries) > 0 {
 			helpers.AppLogger.Infof("检测到旧的数据库数据目录 %s 不为空，正在迁移数据到用户数据目录中...", configDataDir)
-			err := helpers.CopyDir(configDataDir, destDir)
+			err := helpers.CopyDir(configDataDir, dataDestDir)
 			if err != nil {
 				helpers.AppLogger.Errorf("迁移旧的数据库数据到用户数据目录失败: %v", err)
 				panic("数据库安装失败，请检查日志")
@@ -298,12 +300,12 @@ func getDataAndConfigDir() {
 		if appData == "" {
 			appData = os.Getenv("APPDATA")
 		}
-		dataDir = filepath.Join(appData, AppName, "postgres")
-		configDir = filepath.Join(appData, AppName, "config")
+		dataDir = filepath.Join(appData, AppName, "postgres") // 数据库目录
+		configDir = filepath.Join(appData, AppName, "config") // 配置目录
 	} else {
 		appData = helpers.RootDir
-		configDir = filepath.Join(appData, "config")
-		dataDir = filepath.Join(configDir, "postgres")
+		configDir = filepath.Join(appData, "config") // 配置目录
+		dataDir = filepath.Join(appData, "postgres") // 数据库目录
 	}
 	err := os.MkdirAll(dataDir, 0755)
 	if err != nil {
