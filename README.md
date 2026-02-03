@@ -51,7 +51,7 @@ sudo ./build_and_release.sh -v vx.xx.xx
 
 ## 需要自备的密钥
 
-- 115开放平台 AppID，可在web页面设置
+- 115开放平台 AppID，现在改为使用OAuth授权方式，开发者需要根据代码自己实现OAUTH服务端来和115通信，或者改为二维码扫码登录授权。
 - TMDB API KEY，可在web页面设置
 - OpenAI兼容的 API KEY，目前用的硅基流动，可在web页面设置
 - Fanart.tv API KEY
