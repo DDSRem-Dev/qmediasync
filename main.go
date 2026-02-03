@@ -36,6 +36,7 @@ var FANART_API_KEY = ""
 var DEFAULT_TMDB_ACCESS_TOKEN = ""
 var DEFAULT_TMDB_API_KEY = ""
 var DEFAULT_SC_API_KEY = ""
+var ENCRYPTION_KEY = ""
 
 var AppName string = "QMediaSync"
 var QMSApp *App
@@ -591,10 +592,31 @@ func Init() {
 	// 将版本写入helper
 	helpers.Version = Version
 	helpers.ReleaseDate = PublishDate
-	helpers.DEFAULT_SC_API_KEY = DEFAULT_SC_API_KEY
-	helpers.DEFAULT_TMDB_API_KEY = DEFAULT_TMDB_API_KEY
-	helpers.DEFAULT_TMDB_ACCESS_TOKEN = DEFAULT_TMDB_ACCESS_TOKEN
-	helpers.FANART_API_KEY = FANART_API_KEY
+	if DEFAULT_SC_API_KEY != "" {
+		helpers.DEFAULT_SC_API_KEY = DEFAULT_SC_API_KEY
+	} else {
+		helpers.DEFAULT_SC_API_KEY = os.Getenv("DEFAULT_SC_API_KEY")
+	}
+	if DEFAULT_TMDB_API_KEY != "" {
+		helpers.DEFAULT_TMDB_API_KEY = DEFAULT_TMDB_API_KEY
+	} else {
+		helpers.DEFAULT_TMDB_API_KEY = os.Getenv("DEFAULT_TMDB_API_KEY")
+	}
+	if DEFAULT_TMDB_ACCESS_TOKEN != "" {
+		helpers.DEFAULT_TMDB_ACCESS_TOKEN = DEFAULT_TMDB_ACCESS_TOKEN
+	} else {
+		helpers.DEFAULT_TMDB_ACCESS_TOKEN = os.Getenv("DEFAULT_TMDB_ACCESS_TOKEN")
+	}
+	if FANART_API_KEY != "" {
+		helpers.FANART_API_KEY = FANART_API_KEY
+	} else {
+		helpers.FANART_API_KEY = os.Getenv("FANART_API_KEY")
+	}
+	if ENCRYPTION_KEY != "" {
+		helpers.ENCRYPTION_KEY = ENCRYPTION_KEY
+	} else {
+		helpers.ENCRYPTION_KEY = os.Getenv("ENCRYPTION_KEY")
+	}
 	initTimeZone() // 设置东8区
 	getRootDir()   // 获取当前工作目录
 	getDataAndConfigDir()

@@ -1,11 +1,13 @@
 package controllers
 
 import (
+	"Q115-STRM/internal/db"
 	"Q115-STRM/internal/helpers"
 	"Q115-STRM/internal/models"
 	"Q115-STRM/internal/updater"
 	"Q115-STRM/internal/v115open"
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/exec"
@@ -57,7 +59,12 @@ var currentUpdateInfo *updateInfo
 // @Security JwtAuth
 // @Security ApiKeyAuth
 func GetLastRelease(c *gin.Context) {
-	releases := listReleases()
+	force := c.Query("force")
+	passCache := false
+	if force == "1" {
+		passCache = true
+	}
+	releases := listReleases(passCache)
 	if releases == nil {
 		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "获取最新版本失败", Data: nil})
 		return
@@ -351,7 +358,21 @@ func CancelUpdate(c *gin.Context) {
 }
 
 // listReleases 列出最新版本
-func listReleases() []version {
+func listReleases(passCache bool) []version {
+	// 直接读取缓存
+	if !passCache {
+		cached := db.Cache.Get("latest_releases")
+		if cached != nil {
+			helpers.AppLogger.Infof("使用缓存的最新版本列表")
+			var versionList []version
+			err := json.Unmarshal(cached, &versionList)
+			if err == nil {
+				return versionList
+			} else {
+				helpers.AppLogger.Infof("解析缓存的最新版本列表失败: %v", err)
+			}
+		}
+	}
 	updater := updater.NewGitHubUpdater("qicfan", "qmediasync", helpers.Version)
 	updater.IncludePreRelease = false
 
@@ -366,7 +387,7 @@ func listReleases() []version {
 		return nil
 	}
 
-	helpers.AppLogger.Infof("找到  %s/%s 的 %d 个最新版本:", "qicfan", "qmediasync", len(releases))
+	helpers.AppLogger.Infof("找到  %s/%s 的 %d 个最新版本", "qicfan", "qmediasync", len(releases))
 	// helpers.AppLogger.Infof("==============================================")
 	versionList := make([]version, 0)
 	for i, release := range releases {
@@ -379,7 +400,11 @@ func listReleases() []version {
 			Latest:  i == 0,
 		})
 	}
-	helpers.AppLogger.Infof("==============================================")
+	// 缓存1小时
+	versionListStr, _ := json.Marshal(versionList)
+	if versionListStr != nil {
+		db.Cache.Set("latest_releases", versionListStr, 3600)
+	}
 	return versionList
 }
 

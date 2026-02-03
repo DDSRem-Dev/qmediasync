@@ -11,8 +11,6 @@ import (
 	"strings"
 )
 
-const ENCRYPTION_KEY = "vB1g0emSPawMIiDUohTzFAun7LGl5xRJ"
-
 // AES-256-CBC 加密（URL安全）
 func Encrypt(plaintext string) (string, error) {
 	keyHash := sha256.Sum256([]byte(ENCRYPTION_KEY))

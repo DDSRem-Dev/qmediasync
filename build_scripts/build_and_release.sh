@@ -121,6 +121,7 @@ for platform in "${PLATFORMS[@]}"; do
         DEFAULT_TMDB_ACCESS_TOKEN="${DEFAULT_TMDB_ACCESS_TOKEN:-}"
         DEFAULT_TMDB_API_KEY="${DEFAULT_TMDB_API_KEY:-}"
         DEFAULT_SC_API_KEY="${DEFAULT_SC_API_KEY:-}"
+        ENCRYPTION_KEY="${ENCRYPTION_KEY:-}"
         
         # Check if any API key is empty
         if [ -z "$FANART_API_KEY" ] || [ -z "$DEFAULT_TMDB_ACCESS_TOKEN" ] || [ -z "$DEFAULT_TMDB_API_KEY" ] || [ -z "$DEFAULT_SC_API_KEY" ]; then
@@ -130,16 +131,17 @@ for platform in "${PLATFORMS[@]}"; do
             print_colored "yellow" "  - DEFAULT_TMDB_ACCESS_TOKEN"
             print_colored "yellow" "  - DEFAULT_TMDB_API_KEY"
             print_colored "yellow" "  - DEFAULT_SC_API_KEY"
+            print_colored "yellow" "  - ENCRYPTION_KEY"
             exit 1
         fi
         
         # Determine executable name and link flags
         if [ "$platform" = "windows" ]; then
             EXE_NAME="QMediaSync.exe"
-            LDFLAGS="-s -w -X main.Version=$TAG -X 'main.PublishDate=$PUBLISH_DATE' -X main.FANART_API_KEY=$FANART_API_KEY -X main.DEFAULT_TMDB_ACCESS_TOKEN=$DEFAULT_TMDB_ACCESS_TOKEN -X main.DEFAULT_TMDB_API_KEY=$DEFAULT_TMDB_API_KEY -X main.DEFAULT_SC_API_KEY=$DEFAULT_SC_API_KEY"
+            LDFLAGS="-s -w -X main.Version=$TAG -X 'main.PublishDate=$PUBLISH_DATE' -X main.FANART_API_KEY=$FANART_API_KEY -X main.DEFAULT_TMDB_ACCESS_TOKEN=$DEFAULT_TMDB_ACCESS_TOKEN -X main.DEFAULT_TMDB_API_KEY=$DEFAULT_TMDB_API_KEY -X main.DEFAULT_SC_API_KEY=$DEFAULT_SC_API_KEY -X main.DEFAULT_SC_API_KEY=$ENCRYPTION_KEY"
         else
             EXE_NAME="QMediaSync"
-            LDFLAGS="-s -w -X main.Version=$TAG -X 'main.PublishDate=$PUBLISH_DATE' -X main.FANART_API_KEY=$FANART_API_KEY -X main.DEFAULT_TMDB_ACCESS_TOKEN=$DEFAULT_TMDB_ACCESS_TOKEN -X main.DEFAULT_TMDB_API_KEY=$DEFAULT_TMDB_API_KEY -X main.DEFAULT_SC_API_KEY=$DEFAULT_SC_API_KEY"
+            LDFLAGS="-s -w -X main.Version=$TAG -X 'main.PublishDate=$PUBLISH_DATE' -X main.FANART_API_KEY=$FANART_API_KEY -X main.DEFAULT_TMDB_ACCESS_TOKEN=$DEFAULT_TMDB_ACCESS_TOKEN -X main.DEFAULT_TMDB_API_KEY=$DEFAULT_TMDB_API_KEY -X main.DEFAULT_SC_API_KEY=$DEFAULT_SC_API_KEY -X main.DEFAULT_SC_API_KEY=$ENCRYPTION_KEY"
         fi
         
         # Build

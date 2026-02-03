@@ -134,14 +134,14 @@ func (g *GitHubUpdater) CheckForUpdate() (*UpdateInfo, error) {
 func (g *GitHubUpdater) getReleases() ([]GitHubRelease, error) {
 	apiUrl := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", g.Owner, g.Repo)
 	proxyUrl := helpers.TestGithub(apiUrl, models.SettingsGlobal.HttpProxy)
-	helpers.AppLogger.Infof("获取最新版本URL: %s", proxyUrl)
+	if proxyUrl == "failed" {
+		helpers.AppLogger.Infof("使用自己设置的网络代理 %s 获取最新版本URL", models.SettingsGlobal.HttpProxy)
+	} else {
+		helpers.AppLogger.Infof("使用Github代理 https://gh.llkk.cc 获取最新版本URL")
+	}
 	var req *http.Request
 	var err error
 	if proxyUrl == "failed" {
-		// 必须使用代理请求，没有设置http代理则返回错误
-		if models.SettingsGlobal.HttpProxy == "" {
-			return nil, fmt.Errorf("必须配置HTTP代理才能获取最新版本")
-		}
 		// 构建使用http代理的请求
 		// 构建使用http代理的请求
 		proxyParsed, perr := url.Parse(models.SettingsGlobal.HttpProxy)
