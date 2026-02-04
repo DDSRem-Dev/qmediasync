@@ -548,7 +548,7 @@ func (s *SyncStrm) handleTempTableDiff() error {
 			if syncFileCache == nil {
 				// 同步缓存中没有该文件，删除SyncFile记录
 				waitDeleteIds = append(waitDeleteIds, file.ID)
-				// s.Sync.Logger.Infof("SyncFile表数据 ID=%d 在同步缓存中不存在，已标记为删除", file.ID)
+				s.Sync.Logger.Infof("SyncFile表数据 ID=%d 在同步缓存中不存在，已标记为删除", file.ID)
 			} else {
 				// 双方都有，更新SyncFile记录
 				// 主要更新数据name, size, m_time, path, local_file_path
@@ -570,7 +570,7 @@ func (s *SyncStrm) handleTempTableDiff() error {
 				}
 				// 然后从同步缓存中移除该记录
 				s.memSyncCache.DeleteByFileId(file.FileId)
-				// s.Sync.Logger.Infof("SyncFile表数据 ID=%d 在同步缓存中存在，已更新并移除同步缓存记录", file.ID)
+				s.Sync.Logger.Infof("SyncFile表数据 ID=%d 在同步缓存中存在，已更新并移除同步缓存记录", file.ID)
 			}
 		}
 		if len(batch) < limit {
@@ -579,31 +579,33 @@ func (s *SyncStrm) handleTempTableDiff() error {
 		offset += limit
 	}
 	s.Sync.Logger.Infof("SyncFile表中共有 %d 条多余数据需要删除，开始分批删除，每批1000条", len(waitDeleteIds))
-	// 分批删除
-	batchSize := 1000
-	if len(waitDeleteIds) <= batchSize {
-		// 一次性删除
-		err := db.Db.Where("id IN ?", waitDeleteIds).Delete(&models.SyncFile{}).Error
-		if err != nil {
-			s.Sync.Logger.Errorf("删除SyncFile表数据失败: %v", err)
-			return err
-		}
-	} else {
-		for i := 0; i < len(waitDeleteIds); i += batchSize {
-			end := i + batchSize
-			if end > len(waitDeleteIds) {
-				end = len(waitDeleteIds)
-			}
-			batchIds := waitDeleteIds[i:end]
-			err := db.Db.Where("id IN ?", batchIds).Delete(&models.SyncFile{}).Error
+	if len(waitDeleteIds) > 0 {
+		// 分批删除
+		batchSize := 1000
+		if len(waitDeleteIds) <= batchSize {
+			// 一次性删除
+			err := db.Db.Where("id IN ?", waitDeleteIds).Delete(&models.SyncFile{}).Error
 			if err != nil {
 				s.Sync.Logger.Errorf("删除SyncFile表数据失败: %v", err)
 				return err
 			}
+		} else {
+			for i := 0; i < len(waitDeleteIds); i += batchSize {
+				end := i + batchSize
+				if end > len(waitDeleteIds) {
+					end = len(waitDeleteIds)
+				}
+				batchIds := waitDeleteIds[i:end]
+				err := db.Db.Where("id IN ?", batchIds).Delete(&models.SyncFile{}).Error
+				if err != nil {
+					s.Sync.Logger.Errorf("删除SyncFile表数据失败: %v", err)
+					return err
+				}
+			}
+			s.Sync.Logger.Infof("删除SyncFile表中 %d 条多余数据成功", len(waitDeleteIds))
 		}
-		s.Sync.Logger.Infof("删除SyncFile表中 %d 条多余数据成功", len(waitDeleteIds))
+		s.Sync.Logger.Infof("已删除所有网盘不存在的文件记录，开始插入新增的文件记录")
 	}
-	s.Sync.Logger.Infof("已删除所有网盘不存在的文件记录，开始插入新增的文件记录")
 	waitDeleteIds = nil // 清空切片
 
 	// 然后插入同步缓存中剩余的新增数据
@@ -626,12 +628,13 @@ func (s *SyncStrm) handleTempTableDiff() error {
 				s.Sync.Logger.Errorf("插入SyncFile表数据失败 FileID=%s: %v", file.GetFileId(), err)
 				continue
 			}
-			// s.Sync.Logger.Infof("插入SyncFile表数据成功 FileID=%s", file.FileId)
+			s.Sync.Logger.Infof("插入SyncFile表数据成功 FileID=%s", file.FileId)
+			// 插入成功后，从同步缓存中移除该记录
+			s.memSyncCache.DeleteByFileId(file.FileId)
 		}
 		if len(fileItems) < limit {
 			break
 		}
-		offset += limit
 	}
 	return nil
 }
