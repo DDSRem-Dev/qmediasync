@@ -609,7 +609,7 @@ func (s *SyncStrm) handleTempTableDiff() error {
 	fileItems := s.memSyncCache.GetAllFile()
 	s.Sync.Logger.Infof("内存同步缓存中共有 %d 条新增数据需要插入", len(fileItems))
 	if len(fileItems) == 0 {
-		s.Sync.Logger.Info("内存同步缓存数据全部处理完毕")
+		// s.Sync.Logger.Info("内存同步缓存数据全部处理完毕")
 		return nil
 	}
 	for _, file := range fileItems {
@@ -619,7 +619,7 @@ func (s *SyncStrm) handleTempTableDiff() error {
 			s.Sync.Logger.Errorf("插入SyncFile表数据失败 FileID=%s: %v", file.GetFileId(), err)
 			continue
 		}
-		s.Sync.Logger.Infof("插入SyncFile表数据成功 FileID=%s", file.GetFileId())
+		// s.Sync.Logger.Infof("插入SyncFile表数据成功 FileID=%s", file.GetFileId())
 		// 插入成功后，从同步缓存中移除该记录
 		s.memSyncCache.DeleteByFileId(file.GetFileId())
 	}

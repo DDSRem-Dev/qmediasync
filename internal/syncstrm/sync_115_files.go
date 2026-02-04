@@ -93,7 +93,7 @@ func (s *SyncStrm) process115FilePage(ctx context.Context, page, limit int) erro
 		}
 		if parentPath, ok := s.sync115.existsPathes.Load(file.Pid); ok {
 			syncFile.Path = parentPath.(string)
-			s.Sync.Logger.Infof("文件 %s 的父路径已存在，路径为 %s", file.FileName, syncFile.Path)
+			// s.Sync.Logger.Infof("文件 %s 的父路径已存在，路径为 %s", file.FileName, syncFile.Path)
 			syncFile.GetLocalFilePath(s.TargetPath, s.SourcePath)
 			// 检查是否被排除
 			if s.IsExcludePath(syncFile.Path) {
@@ -107,12 +107,12 @@ func (s *SyncStrm) process115FilePage(ctx context.Context, page, limit int) erro
 			s.Sync.Logger.Errorf("文件 %s => %s 插入同步缓存失败: %v", syncFile.FileId, syncFile.FileName, err)
 			return err
 		}
-		s.Sync.Logger.Infof("文件 %s => %s 插入同步缓存成功, 路径 %s", syncFile.FileId, syncFile.FileName, syncFile.LocalFilePath)
+		// s.Sync.Logger.Infof("文件 %s => %s 插入同步缓存成功, 路径 %s", syncFile.FileId, syncFile.FileName, syncFile.LocalFilePath)
 		// 如果路径完整，直接处理文件
 		if syncFile.LocalFilePath != "" {
 			s.processNetFile(&syncFile)
 		}
-		s.Sync.Logger.Infof("文件 %s => %s 处理完成", syncFile.FileId, syncFile.FileName)
+		// s.Sync.Logger.Infof("文件 %s => %s 处理完成", syncFile.FileId, syncFile.FileName)
 	}
 	s.Sync.Logger.Infof("文件处理器处理完成offset=%d, limit=%d，共处理 %d 个文件", offset, limit, len(files))
 	return nil

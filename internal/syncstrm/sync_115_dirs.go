@@ -171,7 +171,7 @@ func (s *SyncStrm) handelTempFileByPathId(pathId string) error {
 	for _, file := range files {
 		// 更新文件路径
 		file.GetLocalFilePath(s.TargetPath, s.SourcePath)
-		s.Sync.Logger.Infof("文件ID %s 路径 %s 本地路径 %s 路径已补全，开始处理文件", file.FileId, file.Path, file.LocalFilePath)
+		// s.Sync.Logger.Infof("文件ID %s 路径 %s 本地路径 %s 路径已补全，开始处理文件", file.FileId, file.Path, file.LocalFilePath)
 		// 开始处理文件
 		s.processNetFile(file)
 	}
