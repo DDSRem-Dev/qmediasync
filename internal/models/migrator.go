@@ -307,6 +307,19 @@ func Migrate() {
 		db.Db.Migrator().DropTable("sync115_path", "sync_files_cache", "backup_task", "restore_task")
 		migrator.UpdateVersionCode(db.Db)
 	}
+	if migrator.VersionCode == 21 {
+		db.Db.AutoMigrate(Settings{}) // 增加openlist限速新字段
+		// 给新字段添加默认值
+		updateData := make(map[string]interface{})
+		updateData["openlist_qps"] = 1
+		updateData["openlist_retry"] = 1
+		updateData["openlist_retry_delay"] = 60
+		err := db.Db.Model(Settings{}).Where("id >= ?", 1).Updates(updateData).Error
+		if err != nil {
+			helpers.AppLogger.Errorf("更新Openlist限速设置默认值失败: %v", err)
+		}
+		migrator.UpdateVersionCode(db.Db)
+	}
 	helpers.AppLogger.Infof("当前数据库版本 %d", migrator.VersionCode)
 }
 
@@ -566,19 +579,22 @@ func InitSettings() {
 	ipv4, _ := helpers.GetLocalIP()
 	defaultSettings = Settings{
 		// 设置默认值
-		TelegramBotToken:  "",
-		TelegramChatId:    "",
-		HttpProxy:         "",
-		Cron:              helpers.GlobalConfig.Strm.Cron,
-		MetaExt:           string(metaExtStr),
-		VideoExt:          string(videoExtStr),
-		MinVideoSize:      helpers.GlobalConfig.Strm.MinVideoSize,
-		DeleteDir:         0,
-		UploadMeta:        1,
-		DownloadMeta:      1,
-		StrmBaseUrl:       fmt.Sprintf("http://%s:12333", ipv4),
-		DownloadThreads:   1,
-		FileDetailThreads: 3,
+		TelegramBotToken:   "",
+		TelegramChatId:     "",
+		HttpProxy:          "",
+		Cron:               helpers.GlobalConfig.Strm.Cron,
+		MetaExt:            string(metaExtStr),
+		VideoExt:           string(videoExtStr),
+		MinVideoSize:       helpers.GlobalConfig.Strm.MinVideoSize,
+		DeleteDir:          0,
+		UploadMeta:         1,
+		DownloadMeta:       1,
+		StrmBaseUrl:        fmt.Sprintf("http://%s:12333", ipv4),
+		DownloadThreads:    1,
+		FileDetailThreads:  3,
+		OpenlistQPS:        3,
+		OpenlistRetry:      1,
+		OpenlistRetryDelay: 60,
 	}
 	db.Db.Create(&defaultSettings)
 	helpers.AppLogger.Info("已默认添加配置")

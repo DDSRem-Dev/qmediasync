@@ -38,18 +38,28 @@ type Settings struct {
 	EmbyUrl    string `json:"emby_url"`     // Emby的主机地址
 	EmbyApiKey string `json:"emby_api_key"` // Emby的API Key
 
-	DownloadThreads   int `json:"download_threads" gorm:"default:1"`    // 下载线程数
-	FileDetailThreads int `json:"file_detail_threads" gorm:"default:1"` // 查询文件详情的线程数
+	DownloadThreads    int `json:"download_threads" gorm:"default:1"`      // 下载qps
+	FileDetailThreads  int `json:"file_detail_threads" gorm:"default:1"`   // 115接口qps
+	OpenlistQPS        int `json:"openlist_qps" gorm:"default:3"`          // Openlist接口qps，默认3
+	OpenlistRetry      int `json:"openlist_retry" gorm:"default:1"`        // Openlist重试次数，默认1
+	OpenlistRetryDelay int `json:"openlist_retry_delay" gorm:"default:60"` // Openlist重试间隔，默认60秒，躲避QPM限流
+
 }
 
 var SettingsGlobal = &Settings{}
 
-func (settings *Settings) UpdateThreads(downloadThreads int, fileDetailThreads int) bool {
+func (settings *Settings) UpdateThreads(downloadThreads int, fileDetailThreads, openlistQPS, openlistRetry, openlistRetryDelay int) bool {
 	settings.DownloadThreads = downloadThreads
 	settings.FileDetailThreads = fileDetailThreads
+	settings.OpenlistQPS = openlistQPS
+	settings.OpenlistRetry = openlistRetry
+	settings.OpenlistRetryDelay = openlistRetryDelay
 	updateData := make(map[string]interface{})
 	updateData["download_threads"] = downloadThreads
 	updateData["file_detail_threads"] = fileDetailThreads
+	updateData["openlist_qps"] = openlistQPS
+	updateData["openlist_retry"] = openlistRetry
+	updateData["openlist_retry_delay"] = openlistRetryDelay
 	err := db.Db.Model(settings).Where("id = ?", settings.ID).Updates(updateData).Error
 	if err != nil {
 		helpers.AppLogger.Errorf("更新线程数失败: %v", err)
@@ -62,8 +72,11 @@ func (settings *Settings) UpdateThreads(downloadThreads int, fileDetailThreads i
 
 func (settings *Settings) GetThreads() map[string]int {
 	return map[string]int{
-		"download_threads":    settings.DownloadThreads,
-		"file_detail_threads": settings.FileDetailThreads,
+		"download_threads":     settings.DownloadThreads,
+		"file_detail_threads":  settings.FileDetailThreads,
+		"openlist_qps":         settings.OpenlistQPS,
+		"openlist_retry":       settings.OpenlistRetry,
+		"openlist_retry_delay": settings.OpenlistRetryDelay,
 	}
 }
 

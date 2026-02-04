@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -91,14 +92,28 @@ func (s *SyncStrm) StartOther() {
 		}
 		// s.Sync.Logger.Debugf("准备请求API接口获取目录下的文件列表, 目录：%s", pathItem.Path)
 		// GetNetFileFiles 返回该目录下的子目录和文件列表
-		fileItems, err := s.SyncDriver.GetNetFileFiles(ctx, pathItem.Path, pathItem.PathId)
-		if err != nil {
-			s.Sync.Logger.Errorf("请求完成，获取目录 %s 下的文件列表失败: %v", pathItem.Path, err)
-			select {
-			case s.PathErrChan <- err:
-			default:
+		retryCount := 0
+		var fileItems []*SyncFileCache
+		var err error
+	apiloop:
+		for {
+			fileItems, err = s.SyncDriver.GetNetFileFiles(ctx, pathItem.Path, pathItem.PathId)
+			if err != nil {
+				if retryCount >= models.SettingsGlobal.OpenlistRetry {
+					s.Sync.Logger.Errorf("重试 %d 次后，获取目录 %s 下的文件列表失败: %v", models.SettingsGlobal.OpenlistRetry, pathItem.Path, err)
+					select {
+					case s.PathErrChan <- err:
+					default:
+					}
+					return err
+				} else {
+					retryCount++
+					s.Sync.Logger.Warnf("获取目录 %s 下的文件列表失败，休息1分钟，重试1次: %v", pathItem.Path, err)
+					time.Sleep(time.Duration(models.SettingsGlobal.OpenlistRetryDelay) * time.Second)
+					continue apiloop
+				}
 			}
-			return err
+			break apiloop
 		}
 		if len(fileItems) == 0 {
 			s.Sync.Logger.Infof("请求完成，目录 %s 下没有文件，跳过", pathItem.Path)
@@ -120,7 +135,7 @@ func (s *SyncStrm) StartOther() {
 					Path:   fileItem.GetFullRemotePath(),
 					PathId: fileItem.GetFileId(),
 				}
-				s.Sync.Logger.Debugf("目录 %s 下发现子目录 %s，准备放入路径队列继续处理", pathItem.Path, subPath.Path)
+				s.Sync.Logger.Debugf("发现子目录 %s，准备放入路径队列继续处理", pathItem.Path, subPath.Path)
 				enqueue(subPath)
 			} else {
 				// 处理文件

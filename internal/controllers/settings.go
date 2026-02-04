@@ -486,8 +486,8 @@ func GetThreads(c *gin.Context) {
 // @Tags 系统设置
 // @Accept json
 // @Produce json
-// @Param download_threads body integer true "下载线程数"
-// @Param file_detail_threads body integer true "文件详情查询线程数"
+// @Param download_threads body integer true "下载QPS"
+// @Param file_detail_threads body integer true "115接口QPS"
 // @Success 200 {object} object
 // @Failure 200 {object} object
 // @Router /setting/threads [post]
@@ -495,8 +495,11 @@ func GetThreads(c *gin.Context) {
 // @Security ApiKeyAuth
 func UpdateThreads(c *gin.Context) {
 	type updateThreadsRequest struct {
-		DownloadThreads   int `form:"download_threads" json:"download_threads" binding:"required"`       // 下载线程数
-		FileDetailThreads int `form:"file_detail_threads" json:"file_detail_threads" binding:"required"` // 查询文件详情的线程数
+		DownloadThreads    int `form:"download_threads" json:"download_threads" binding:"required"`         // 下载QPS
+		FileDetailThreads  int `form:"file_detail_threads" json:"file_detail_threads" binding:"required"`   // 115接口QPS
+		OpenlistQPS        int `form:"openlist_qps" json:"openlist_qps" binding:"required"`                 // OpenList QPS
+		OpenlistRetry      int `form:"openlist_retry" json:"openlist_retry" binding:"required"`             // OpenList 重试次数
+		OpenlistRetryDelay int `form:"openlist_retry_delay" json:"openlist_retry_delay" binding:"required"` // OpenList 重试间隔，单位秒
 	}
 	var req updateThreadsRequest
 	if err := c.ShouldBind(&req); err != nil {
@@ -506,7 +509,7 @@ func UpdateThreads(c *gin.Context) {
 	downloadThreads := req.DownloadThreads
 	fileDetailThreads := req.FileDetailThreads
 	// 更新设置
-	if !models.SettingsGlobal.UpdateThreads(downloadThreads, fileDetailThreads) {
+	if !models.SettingsGlobal.UpdateThreads(downloadThreads, fileDetailThreads, req.OpenlistQPS, req.OpenlistRetry, req.OpenlistRetryDelay) {
 		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "更新线程数失败", Data: nil})
 		return
 	}

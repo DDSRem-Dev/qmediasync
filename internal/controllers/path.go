@@ -209,10 +209,10 @@ func Get115PathList(parentId string, accountId uint) ([]DirResp, error) {
 			folders = append(folders, DirResp{
 				Id:   "0",
 				Name: "..",
-				Path: "/",
+				Path: "",
 			})
 		} else {
-			parentPathStr := "/"
+			parentPathStr := ""
 			parentPathId := "0"
 			for idx, p := range resp.Path {
 				if p.FileId == "0" {
@@ -237,16 +237,14 @@ func Get115PathList(parentId string, accountId uint) ([]DirResp, error) {
 	for _, item := range resp.Data {
 		parentPath := resp.PathStr
 		if parentPath == "" {
-			parentPath = "/"
-		} else {
-			parentPath = "/" + parentPath
+			parentPath = ""
 		}
 		helpers.AppLogger.Infof("遍历 %s 的115目录列表, 路径: %s", parentPath, item.FileName)
 		if item.FileCategory == v115open.TypeDir {
 			folders = append(folders, DirResp{
 				Id:   item.FileId,
 				Name: item.FileName,
-				Path: parentPath + "/" + item.FileName,
+				Path: filepath.ToSlash(filepath.Join(parentPath, item.FileName)),
 			})
 		}
 	}

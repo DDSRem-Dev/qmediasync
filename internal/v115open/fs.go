@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -139,7 +140,7 @@ func (c *OpenClient) GetFsList(ctx context.Context, fileId string, showCur bool,
 		}
 		pathStr = append(pathStr, item.Name)
 	}
-	respData.PathStr = strings.Join(pathStr, "/")
+	respData.PathStr = filepath.ToSlash(filepath.Join(pathStr...))
 	pathStr = nil
 	return &respData, nil
 }

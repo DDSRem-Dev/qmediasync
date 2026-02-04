@@ -137,7 +137,7 @@ func (c *Client) FileList(ctx context.Context, path string, page int, perPage in
 		Path:     path,
 		Page:     page,
 		PerPage:  perPage,
-		Refresh:  true,
+		Refresh:  false,
 		Password: "",
 	}
 	result := &Resp[FileListResp]{}
