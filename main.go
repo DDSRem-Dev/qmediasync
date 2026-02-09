@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gopkg.in/yaml.v2"
 )
 
 var Version string = "v0.0.1"
@@ -44,7 +45,6 @@ var QMSApp *App
 type App struct {
 	isRelease   bool
 	dbManager   *database.Manager
-	config      *dbConfig.Config
 	httpServer  *http.Server
 	httpsServer *http.Server
 	version     string
@@ -117,7 +117,6 @@ func (app *App) Stop() {
 func (app *App) StartHttpsServer(r *gin.Engine) {
 	certFile := filepath.Join(helpers.RootDir, "config", "server.crt")
 	keyFile := filepath.Join(helpers.RootDir, "config", "server.key")
-	host := helpers.GlobalConfig.WebHost
 	if !helpers.PathExists(certFile) || !helpers.PathExists(keyFile) {
 		return
 	}
@@ -128,8 +127,7 @@ func (app *App) StartHttpsServer(r *gin.Engine) {
 		if !helpers.IsRelease {
 			sslHost = "localhost:12332"
 		} else {
-			// 将12333替换为12332
-			sslHost = strings.Replace(host, "12333", "12332", 1)
+			sslHost = helpers.GlobalConfig.HttpsHost
 		}
 		app.httpsServer = &http.Server{
 			Addr:    sslHost,
@@ -144,7 +142,7 @@ func (app *App) StartHttpsServer(r *gin.Engine) {
 }
 
 func (app *App) StartHttpServer(r *gin.Engine) {
-	host := helpers.GlobalConfig.WebHost
+	host := helpers.GlobalConfig.HttpHost
 	// 同时在12333端口上启动http服务
 	app.httpServer = &http.Server{
 		Addr:    host,
@@ -159,28 +157,45 @@ func (app *App) StartHttpServer(r *gin.Engine) {
 }
 
 func (a *App) getDBMode() string {
-	if a.config.App.Mode == "docker" || a.config.DB.External || runtime.GOOS == "linux" {
+	if helpers.GlobalConfig.Db.PostgresType == helpers.PostgresTypeExternal {
 		return "external"
 	}
+	// if a.config.App.Mode == "docker" || a.config.DB.External || runtime.GOOS == "linux" {
+	// 	return "external"
+	// }
 	return "embedded"
 }
 
 func (app *App) StartDatabase() error {
+	defer models.Migrate()
+	// 根据配置启动数据库连接
+	if helpers.GlobalConfig.Db.Engine == helpers.DbEngineSqlite {
+		// 如果是sqlite，直接初始化sqlite连接
+		sqliteFile := filepath.Join(helpers.ConfigDir, helpers.GlobalConfig.Db.SqliteFile)
+		log.Printf("sqlite数据库文件路径：%s", sqliteFile)
+		db.Db = db.InitSqlite3(sqliteFile)
+		return nil
+	}
+	if helpers.GlobalConfig.Db.PostgresType == helpers.PostgresTypeEmbedded {
+		// 如果是嵌入式postgres，检查是否需要迁移到用户数据目录
+		app.migratePostgresToDataDir()
+	}
+	config := dbConfig.Load()
 	// 初始化数据库管理器
 	dbConfig := &database.Config{
 		Mode:         app.getDBMode(),
-		Host:         app.config.DB.Host,
-		Port:         app.config.DB.Port,
-		User:         app.config.DB.User,
-		Password:     app.config.DB.Password,
-		DBName:       app.config.DB.Name,
-		SSLMode:      app.config.DB.SSLMode,
-		LogDir:       app.config.DB.LogDir,
-		DataDir:      app.config.DB.DataDir,
-		BinaryPath:   app.config.DB.BinaryPath,
-		MaxOpenConns: app.config.DB.MaxOpenConns,
-		MaxIdleConns: app.config.DB.MaxIdleConns,
-		External:     app.config.DB.External,
+		Host:         config.DB.Host,
+		Port:         config.DB.Port,
+		User:         config.DB.User,
+		Password:     config.DB.Password,
+		DBName:       config.DB.Name,
+		SSLMode:      config.DB.SSLMode,
+		LogDir:       config.DB.LogDir,
+		DataDir:      config.DB.DataDir,
+		BinaryPath:   config.DB.BinaryPath,
+		MaxOpenConns: config.DB.MaxOpenConns,
+		MaxIdleConns: config.DB.MaxIdleConns,
+		External:     helpers.GlobalConfig.Db.PostgresType == helpers.PostgresTypeExternal,
 	}
 
 	app.dbManager = database.NewManager(dbConfig)
@@ -195,8 +210,6 @@ func (app *App) StartDatabase() error {
 	db.InitPostgres(app.dbManager.GetDB())
 	// 设置全局管理器引用供其他包使用
 	db.Manager = app.dbManager
-	// 开始数据库版本维护
-	models.Migrate()
 	return nil
 }
 
@@ -258,9 +271,6 @@ func newApp() {
 		version:     Version,
 		publishDate: PublishDate,
 	}
-	// 检查是否需要将postgres部署到用户数据目录
-	QMSApp.migratePostgresToDataDir()
-	QMSApp.config = dbConfig.Load()
 }
 
 func initTimeZone() {
@@ -273,9 +283,7 @@ func checkRelease() {
 		helpers.IsRelease = true
 	}
 	arg1 := strings.ToLower(os.Args[0])
-	// fmt.Printf("arg1=%s\n", arg1)
 	name := strings.ToLower(filepath.Base(arg1))
-	// fmt.Printf("name=%s\n", name)
 	helpers.IsRelease = strings.Index(name, "qmediasync") == 0 && !strings.Contains(arg1, "go-build")
 }
 
@@ -292,7 +300,7 @@ func getRootDir() string {
 		if runtime.GOOS == "windows" {
 			exPath = "D:\\Dev\\qmediasync"
 		} else {
-			exPath = "/home/qicfan/dev/q115-strm-go"
+			exPath = "/home/qicfan/dev/qmediasync"
 		}
 	}
 	helpers.RootDir = exPath // 获取当前工作目录
@@ -608,8 +616,8 @@ func setRouter(r *gin.Engine) {
 	}
 }
 
-func initEnv() {
-	fmt.Printf("当前版本号:%s, 发布日期:%s\n", Version, PublishDate)
+func initEnv() bool {
+	log.Printf("当前版本号:%s, 发布日期:%s\n", Version, PublishDate)
 	// 将版本写入helper
 	helpers.Version = Version
 	helpers.ReleaseDate = PublishDate
@@ -638,43 +646,41 @@ func initEnv() {
 	} else {
 		helpers.ENCRYPTION_KEY = os.Getenv("ENCRYPTION_KEY")
 	}
-	initTimeZone() // 设置东8区
-	getRootDir()   // 获取当前工作目录
-	getDataAndConfigDir()
-	fmt.Printf("当前工作目录:%s\n", helpers.RootDir)
-	fmt.Printf("当前数据目录：%s\n", helpers.DataDir)
-	fmt.Printf("当前配置文件目录: %s\n", helpers.ConfigDir)
+	initTimeZone()        // 设置东8区
+	getRootDir()          // 获取当前工作目录
+	getDataAndConfigDir() // 获取数据库数据目录和配置文件目录
+	log.Printf("当前工作目录:%s\n", helpers.RootDir)
+	log.Printf("当前数据目录：%s\n", helpers.DataDir)
+	log.Printf("当前配置文件目录: %s\n", helpers.ConfigDir)
 	ipv4, _ := helpers.GetLocalIP()
-	fmt.Printf("本机IPv4地址是 <%s>\n", ipv4)
-
-	// --- 新增：检测数据库数据文件夹是否存在 ---
-	dbDataPath := filepath.Join(helpers.ConfigDir, "postgres/data")
-
-	// 使用 os.Stat 检查目录
-	if _, err := os.Stat(dbDataPath); os.IsNotExist(err) {
-		// 如果文件夹不存在，说明是第一次运行
-		helpers.IsFirstRun = true
-		fmt.Println("检测到数据库尚未初始化，标记为第一次运行")
-	} else {
-		// 如果文件夹存在，进一步检查是否为空（可选）
-		files, _ := os.ReadDir(dbDataPath)
-		if len(files) == 0 {
-			helpers.IsFirstRun = true
-			fmt.Println("检测到数据库文件夹为空，标记为第一次运行")
-		}
+	log.Printf("本机IPv4地址是 <%s>\n", ipv4)
+	// 检查配置文件是否存在
+	configPath := filepath.Join(helpers.ConfigDir, "config.yaml")
+	helpers.IsFirstRun = !helpers.PathExists(configPath)
+	// 如果不存在，启动一个简易web服务来配置数据库连接信息
+	if helpers.IsFirstRun {
+		log.Printf("配置文件不存在，启动简单配置服务: %s", configPath)
+		StartConfigWebServer()
+		return false
 	}
-
-	helpers.InitConfig() // 初始化配置文件
+	log.Printf("配置文件存在，加载配置文件: %s", configPath)
+	// 如果存在，则加载配置文件，进行其他的初始化工作
+	err := helpers.InitConfig()
+	if err != nil {
+		log.Printf("初始化配置文件失败: %v", err)
+		return false
+	}
 	initLogger()
 	// 创建App
 	newApp()
 	helpers.AppLogger.Infof("当前版本号:%s, 发布日期:%s\n", Version, PublishDate)
 	if err := QMSApp.StartDatabase(); err != nil {
 		log.Println("数据库启动失败:", err)
-		return
+		return false
 	}
 	db.InitCache() // 初始化内存缓存
 	initOthers()
+	return true
 }
 
 func parseParams() {
@@ -724,8 +730,10 @@ func parseParams() {
 func main() {
 	getRootDir()
 	parseParams()
-	helpers.LoadEnvFromFile(filepath.Join(helpers.RootDir, "config", ".env"))
-	initEnv()
+	// helpers.LoadEnvFromFile(filepath.Join(helpers.RootDir, "config", ".env"))
+	if !initEnv() {
+		return
+	}
 	if runtime.GOOS == "windows" {
 		if helpers.IsRelease {
 			go QMSApp.Start()
@@ -854,5 +862,100 @@ func replaceDir(srcDir, dstDir, backupDir string) {
 	fmt.Printf("更新 %s 目录...\n", dirName)
 	if err := helpers.CopyDir(srcDir, dstDir); err != nil {
 		fmt.Printf("更新 %s 目录失败: %v\n", dirName, err)
+	}
+}
+
+func StartConfigWebServer() {
+	r := gin.Default()
+
+	r.GET("/", func(c *gin.Context) {
+		c.HTML(200, "db_config.html", gin.H{
+			"title": "数据库配置",
+		})
+	})
+
+	r.POST("/api/config/save", func(c *gin.Context) {
+		var req struct {
+			Engine       string `json:"engine"`
+			PostgresType string `json:"postgresType"`
+			Host         string `json:"host"`
+			Port         int    `json:"port"`
+			User         string `json:"user"`
+			Password     string `json:"password"`
+			Database     string `json:"database"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		yamlConfig := map[string]interface{}{
+			"log": map[string]interface{}{
+				"file":       "logs/app.log",
+				"v115":       "logs/115.log",
+				"openList":   "logs/openList.log",
+				"tmdb":       "logs/tmdb.log",
+				"baiduPan":   "logs/baidupan.log",
+				"syncLogDir": "logs/sync",
+			},
+			"db": map[string]interface{}{
+				"engine":     req.Engine,
+				"sqliteFile": "qmediasync.db",
+			},
+			"cacheSize":        20971520,
+			"jwtSecret":        "Q115-STRM-JWT-TOKEN-250706",
+			"httpHost":         ":12333",
+			"httpsHost":        ":12332",
+			"open115AppId":     "",
+			"open115TestAppId": "",
+			"authServer":       "https://api.mqfamily.top",
+			"baiDuPanAppId":    "QMediaSync",
+		}
+
+		if req.Engine == string(helpers.DbEnginePostgres) {
+			yamlConfig["db"].(map[string]interface{})["postgresType"] = req.PostgresType
+			if req.PostgresType == string(helpers.PostgresTypeExternal) {
+				yamlConfig["db"].(map[string]interface{})["postgresConfig"] = map[string]interface{}{
+					"host":     req.Host,
+					"port":     req.Port,
+					"user":     req.User,
+					"password": req.Password,
+					"database": req.Database,
+				}
+			} else {
+				yamlConfig["db"].(map[string]interface{})["postgresConfig"] = map[string]interface{}{
+					"host":     "localhost",
+					"port":     5432,
+					"user":     "qms",
+					"password": "qms123456",
+					"database": "qms",
+				}
+			}
+		}
+
+		configPath := filepath.Join(helpers.ConfigDir, "config.yaml")
+		configData, err := yaml.Marshal(yamlConfig)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "生成配置失败: " + err.Error()})
+			return
+		}
+
+		if err := os.WriteFile(configPath, configData, 0644); err != nil {
+			c.JSON(500, gin.H{"error": "写入配置文件失败: " + err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{"success": true, "message": "配置已保存，配置服务已退出，请重启软件或者容器"})
+		go func() {
+			time.Sleep(1 * time.Second)
+			os.Exit(0)
+		}()
+	})
+
+	r.LoadHTMLGlob(filepath.Join(helpers.RootDir, "web_statics", "*.html"))
+
+	fmt.Printf("配置服务已启动，请在浏览器中访问: http://localhost:12333\n")
+	if err := r.Run(":12333"); err != nil {
+		log.Fatalf("启动配置服务失败: %v", err)
 	}
 }

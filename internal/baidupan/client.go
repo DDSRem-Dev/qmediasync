@@ -67,8 +67,9 @@ func RefreshToken(accountId uint, refreshToken string) (*RefreshResponse, error)
 		return nil, err
 	}
 	// 构建授权URL
+	authServerUrl := fmt.Sprintf("%s/baidupan/oauth-url", helpers.GlobalConfig.AuthServer)
 	// 注意：redirect_uri需要与百度开放平台配置的一致
-	oauthUrl := fmt.Sprintf("%s?action=refresh&state=%s", helpers.GlobalConfig.BaiduPanAuthServer, stateEncoded)
+	oauthUrl := fmt.Sprintf("%s?action=refresh&state=%s", authServerUrl, stateEncoded)
 	// 发送GET请求
 	resp, err := http.Get(oauthUrl)
 	if err != nil {

@@ -26,27 +26,27 @@ func (*Migrator) TableName() string {
 // 如果没有数据则创建
 // 如果已有数据库则从数据库中获取版本，根据版本执行变更
 func Migrate() {
-	dbFile := filepath.Join(helpers.ConfigDir, helpers.GlobalConfig.Db.File)
-	sqliteDb := db.InitSqlite3(dbFile)
+	// dbFile := filepath.Join(helpers.ConfigDir, helpers.GlobalConfig.Db.SqliteFile)
+	// sqliteDb := db.InitSqlite3(dbFile)
 	maxVersion := 24
-	if sqliteDb != nil {
-		// 从sqlite迁移数据到postgres
-		moveSqliteToPostres(sqliteDb, maxVersion)
-		// 关闭sqlite连接，然后将数据库文件备份
-		sqldb, _ := sqliteDb.DB()
-		if sqldb != nil {
-			sqldb.Close()
-		}
-		os.Rename(dbFile, dbFile+".bak")
-		helpers.AppLogger.Infof("sqlite数据库已备份为：%s", dbFile+".bak")
-	} else {
-		// 先初始化所有表和基础数据
-		if !InitDB(maxVersion) {
-			// 初始化数据库版本表
-			helpers.AppLogger.Info("已完成数据库初始化")
-			return
-		}
+	// if sqliteDb != nil {
+	// 	// 从sqlite迁移数据到postgres
+	// 	moveSqliteToPostres(sqliteDb, maxVersion)
+	// 	// 关闭sqlite连接，然后将数据库文件备份
+	// 	sqldb, _ := sqliteDb.DB()
+	// 	if sqldb != nil {
+	// 		sqldb.Close()
+	// 	}
+	// 	os.Rename(dbFile, dbFile+".bak")
+	// 	helpers.AppLogger.Infof("sqlite数据库已备份为：%s", dbFile+".bak")
+	// } else {
+	// 	// 先初始化所有表和基础数据
+	if !InitDB(maxVersion) {
+		// 初始化数据库版本表
+		helpers.AppLogger.Info("已完成数据库初始化")
+		return
 	}
+	// }
 	var migrator Migrator = Migrator{}
 	err := db.Db.Model(&migrator).First(&migrator).Error
 	if err != nil {
@@ -279,17 +279,7 @@ func Migrate() {
 		db.Db.Exec("DELETE FORM db_download_tasks")
 		db.Db.AutoMigrate(SyncFile{})
 		// 删除已存在的同步缓存表
-		db.Db.Exec("DROP TABLE IF EXISTS public.sync_files_cache")
-		migrator.UpdateVersionCode(db.Db)
-	}
-	if migrator.VersionCode == 17 {
-		// 清空SyncFile，EmbyMediaSyncFile，DbDownloadTask表数据
-		db.Db.Exec("DELETE FROM sync_files")
-		db.Db.Exec("DELETE FROM emby_media_sync_files")
-		db.Db.Exec("DELETE FORM db_download_tasks")
-		db.Db.AutoMigrate(SyncFile{})
-		// 删除已存在的同步缓存表
-		db.Db.Exec("DROP TABLE IF EXISTS public.sync_files_cache")
+		db.Db.Exec("DROP TABLE IF EXISTS sync_files_cache")
 		migrator.UpdateVersionCode(db.Db)
 	}
 	if migrator.VersionCode == 18 {

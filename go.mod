@@ -18,6 +18,7 @@ require (
 	golang.org/x/crypto v0.42.0
 	golang.org/x/time v0.8.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+	gopkg.in/yaml.v2 v2.4.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.30.0
 	resty.dev/v3 v3.0.0-beta.3
@@ -42,7 +43,6 @@ require (
 	golang.org/x/mod v0.27.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 require (

@@ -16,7 +16,7 @@ var DefaultExpire = 300 // 默认5分钟过期
 
 // 初始化缓存
 func InitCache() {
-	cacheSize := helpers.GlobalConfig.Db.CacheSize
+	cacheSize := helpers.GlobalConfig.CacheSize
 	Cache = CacheGlobal{
 		CacheInstance: freecache.NewCache(cacheSize),
 		CacheSize:     cacheSize,

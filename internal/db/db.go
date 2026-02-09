@@ -21,9 +21,9 @@ var Manager *database.Manager // 全局数据库管理器
 
 // 获取一个数据库连接
 func InitSqlite3(dbFile string) *gorm.DB {
-	if !helpers.PathExists(dbFile) {
-		return nil
-	}
+	// if !helpers.PathExists(dbFile) {
+	// 	return nil
+	// }
 	sqliteDb, err := gorm.Open(sqlite.Open(dbFile+"?cache=shared&_journal_mode=WAL&busy_timeout=30000&synchronous=NORMAL&foreign_keys=ON&cache_size=-100000"), &gorm.Config{
 		SkipDefaultTransaction: true,
 	})

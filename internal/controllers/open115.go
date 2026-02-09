@@ -427,7 +427,7 @@ func GetOAuthUrl(c *gin.Context) {
 		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "自定义的APPID无法授权", Data: nil})
 		return
 	}
-	baseUrl := "https://api.mqfamily.top"
+	baseUrl := helpers.GlobalConfig.AuthServer
 	type stateData struct {
 		State    string `json:"state"`
 		Time     int64  `json:"time"`

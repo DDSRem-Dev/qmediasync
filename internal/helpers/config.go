@@ -4,11 +4,29 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v2"
 )
 
 var Version = "0.0.1"
 var ReleaseDate = "2025-11-07"
+
+type DbEngine string
+
+const (
+	DbEngineSqlite   DbEngine = "sqlite"
+	DbEnginePostgres DbEngine = "postgres"
+	DbEngineUnset    DbEngine = ""
+)
+
+type PostgresType string
+
+const (
+	PostgresTypeEmbedded PostgresType = "embedded"
+	PostgresTypeExternal PostgresType = "external"
+)
 
 type configLog struct {
 	File       string `yaml:"file"`
@@ -19,26 +37,41 @@ type configLog struct {
 	Web        string `yaml:"web"`
 	SyncLogDir string `yaml:"syncLogDir"` // 同步任务的日志目录，每个同步任务会生成一个日志文件，文件名为任务ID
 }
-type configDb struct {
-	File      string `yaml:"file"`
-	CacheSize int    `yaml:"cacheSize"`
+
+type PostgresConfig struct {
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
+	Database string `yaml:"database"`
 }
+
+type configDb struct {
+	Engine         DbEngine       `yaml:"engine"`         // 使用的数据库引擎，可选值：sqlite, postgres
+	SqliteFile     string         `yaml:"sqliteFile"`     // SQLite数据库文件路径
+	PostgresType   PostgresType   `yaml:"postgresType"`   // PostgreSQL数据库类型，可选值：embedded, external
+	PostgresConfig PostgresConfig `yaml:"postgresConfig"` // PostgreSQL数据库配置
+}
+
 type configStrm struct {
 	VideoExt     []string `yaml:"videoExt"`
 	MinVideoSize int64    `yaml:"minVideoSize"` // 最小视频大小，单位字节
 	MetaExt      []string `yaml:"metaExt"`
 	Cron         string   `yaml:"cron"` // 定时任务表达式
 }
+
 type Config struct {
-	Log                configLog  `yaml:"log"`
-	Db                 configDb   `yaml:"db"`
-	JwtSecret          string     `yaml:"jwtSecret"`
-	WebHost            string     `yaml:"webHost"`
-	Strm               configStrm `yaml:"strm"`
-	Open115AppId       string     `yaml:"open115AppId"`
-	Open115TestAppId   string     `yaml:"open115TestAppId"`
-	BaiDuPanAppId      string     `yaml:"baiDuPanAppId"`
-	BaiduPanAuthServer string     `yaml:"baiduPanAuthServer"`
+	Log              configLog  `yaml:"log"`
+	Db               configDb   `yaml:"db"`
+	CacheSize        int        `yaml:"cacheSize"` // 数据库缓存大小，单位字节
+	JwtSecret        string     `yaml:"jwtSecret"`
+	HttpHost         string     `yaml:"httpHost"`  // HTTP主机地址
+	HttpsHost        string     `yaml:"httpsHost"` // HTTPS主机地址
+	Strm             configStrm `yaml:"strm"`
+	AuthServer       string     `yaml:"authServer"`
+	Open115AppId     string     `yaml:"open115AppId"`
+	Open115TestAppId string     `yaml:"open115TestAppId"`
+	BaiDuPanAppId    string     `yaml:"baiDuPanAppId"`
 }
 
 var GlobalConfig Config
@@ -54,36 +87,35 @@ var DEFAULT_SC_API_KEY = ""
 var ENCRYPTION_KEY = ""
 
 func InitConfig() error {
-	GlobalConfig = Config{
-		Log: configLog{
-			File:     "logs/app.log",
-			V115:     "logs/115.log",
-			OpenList: "logs/openList.log",
-			TMDB:     "logs/tmdb.log",
-			BaiduPan: "logs/baidupan.log",
-		},
-		Db: configDb{
-			File:      "db.db",
-			CacheSize: 20971520, // 默认20MB
-		},
-		JwtSecret: "Q115-STRM-JWT-TOKEN-250706",
-		WebHost:   ":12333",
-		Strm: configStrm{
-			VideoExt:     []string{".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm", ".flv", ".avi", ".ts", ".m4v"},
-			MinVideoSize: 100, // 默认100MB
-			MetaExt:      []string{".jpg", ".jpeg", ".png", ".webp", ".gif", ".nfo", ".srt", ".ass", ".svg", ".sup", ".lrc"},
-			Cron:         "0 * * * *", // 默认每小时执行一次
-		},
-		Open115AppId:       "",
-		Open115TestAppId:   "",
-		BaiDuPanAppId:      "QMediaSync",
-		BaiduPanAuthServer: "https://api.mqfamily.top/baidupan/oauth-url",
+	configPath := filepath.Join(ConfigDir, "config.yaml")
+	// 从配置文件加载
+	if err := loadYaml(configPath, &GlobalConfig); err != nil {
+		return err
 	}
+	// GlobalConfig = Config{
+	// 	Log: configLog{
+	// 		File:     "logs/app.log",
+	// 		V115:     "logs/115.log",
+	// 		OpenList: "logs/openList.log",
+	// 		TMDB:     "logs/tmdb.log",
+	// 		BaiduPan: "logs/baidupan.log",
+	// 	},
+	// 	Db: configDb{
+	// 		Engine:     DbEngineUnset,
+	// 		SqliteFile: "qmediasync.db",
+	// 	},
+	// 	CacheSize:        20971520, // 默认20MB
+	// 	JwtSecret:        "Q115-STRM-JWT-TOKEN-250706",
+	// 	HttpHost:         ":12333",
+	// 	HttpsHost:        ":12332",
+	// 	Open115AppId:     "",
+	// 	Open115TestAppId: "",
+	// 	AuthServer:       "https://api.mqfamily.top",
+	// 	BaiDuPanAppId:    "QMediaSync",
+	// }
 	return nil
 }
 
-// LoadEnvFromFile loads environment variables from a simple KEY=VALUE file.
-// Lines starting with # and blank lines are ignored. Keys are trimmed; values are kept as-is.
 func LoadEnvFromFile(envPath string) error {
 	f, err := os.Open(envPath)
 	if err != nil {
@@ -116,4 +148,17 @@ func LoadEnvFromFile(envPath string) error {
 	}
 
 	return scanner.Err()
+}
+
+func loadYaml(configPath string, cfg interface{}) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("读取配置文件失败: %w", err)
+	}
+
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return fmt.Errorf("解析配置文件失败: %w", err)
+	}
+
+	return nil
 }
