@@ -197,30 +197,30 @@ func Redirect2OpenlistLink(c *gin.Context) {
 
 // ProxyOriginalResource 拦截 original 接口
 func ProxyOriginalResource(c *gin.Context) {
-	if strings.Contains(strings.ToLower(c.Request.RequestURI), "subtitles") {
-		ProxyOrigin(c)
-		return
-	}
+	// if strings.Contains(strings.ToLower(c.Request.RequestURI), "subtitles") {
+	// 	ProxyOrigin(c)
+	// 	return
+	// }
 
-	itemInfo, err := resolveItemInfo(c, RouteOriginal)
-	if checkErr(c, err) {
-		return
-	}
+	// itemInfo, err := resolveItemInfo(c, RouteOriginal)
+	// if checkErr(c, err) {
+	// 	return
+	// }
 
-	embyPath, err := getEmbyFileLocalPath(itemInfo)
-	if checkErr(c, err) {
-		return
-	}
+	// embyPath, err := getEmbyFileLocalPath(itemInfo)
+	// if checkErr(c, err) {
+	// 	return
+	// }
 
 	// 如果是本地媒体, 代理回源
 	// 2. 以windows盘符开头, 正则匹配
-	pattern := `^[A-Za-z]:`
-	matchedWin, _ := regexp.MatchString(pattern, embyPath)
-	if strings.HasPrefix(embyPath, "/") || matchedWin || !strings.Contains(embyPath, "/proxy-115") {
-		ProxyOrigin(c)
-		return
-	}
-	Redirect2OpenlistLink(c)
+	// pattern := `^[A-Za-z]:`
+	// matchedWin, _ := regexp.MatchString(pattern, embyPath)
+	// if strings.HasPrefix(embyPath, "/") || matchedWin || !strings.Contains(embyPath, "/proxy-115") {
+	ProxyOrigin(c)
+	return
+	// }
+	// Redirect2OpenlistLink(c)
 }
 
 // checkErr 检查 err 是否为空
