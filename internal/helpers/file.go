@@ -3,6 +3,8 @@ package helpers
 import (
 	"bufio"
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -467,4 +469,177 @@ func CopyDir(srcDir, dstDir string) error {
 			return os.WriteFile(destPath, data, info.Mode())
 		}
 	})
+}
+
+type FileChunkMD5Result struct {
+	FileMD5          string   `json:"file_md5"`
+	ChunkMD5s        []string `json:"chunk_md5s"`
+	ChunkSize        int64    `json:"chunk_size"`
+	ChunkCount       int      `json:"chunk_count"`
+	FileSize         int64    `json:"file_size"`
+	ChunkMD5sJsonStr string   `json:"chunk_md5s_json_str"`
+}
+
+const (
+	DefaultChunkSize = 4 * 1024 * 1024
+	MaxChunkCount    = 1024
+)
+
+func CalculateFileChunkMD5(filePath string, chunkSize int64) (*FileChunkMD5Result, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("打开文件失败: %v", err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("获取文件信息失败: %v", err)
+	}
+	fileSize := fileInfo.Size()
+
+	if chunkSize <= 0 {
+		chunkSize = DefaultChunkSize
+	}
+
+	if fileSize <= chunkSize {
+		hash := md5.New()
+		if _, err := io.Copy(hash, file); err != nil {
+			return nil, fmt.Errorf("计算文件MD5失败: %v", err)
+		}
+		fileMD5 := hex.EncodeToString(hash.Sum(nil))
+		return &FileChunkMD5Result{
+			FileMD5:    fileMD5,
+			ChunkMD5s:  []string{fileMD5},
+			ChunkSize:  fileSize,
+			ChunkCount: 1,
+			FileSize:   fileSize,
+		}, nil
+	}
+
+	expectedChunks := int((fileSize + chunkSize - 1) / chunkSize)
+	if expectedChunks > MaxChunkCount {
+		chunkSize = (fileSize + int64(MaxChunkCount) - 1) / int64(MaxChunkCount)
+	}
+
+	var chunkMD5s []string
+	fileHash := md5.New()
+	buf := make([]byte, chunkSize)
+	position := int64(0)
+
+	for position < fileSize {
+		remaining := fileSize - position
+		readSize := chunkSize
+		if remaining < chunkSize {
+			readSize = remaining
+		}
+
+		n, err := file.ReadAt(buf[:readSize], position)
+		if err != nil && err != io.EOF {
+			return nil, fmt.Errorf("读取文件分片失败: %v", err)
+		}
+
+		fileHash.Write(buf[:n])
+
+		chunkHash := md5.New()
+		chunkHash.Write(buf[:n])
+		chunkMD5s = append(chunkMD5s, hex.EncodeToString(chunkHash.Sum(nil)))
+
+		position += int64(n)
+	}
+
+	return &FileChunkMD5Result{
+		FileMD5:    hex.EncodeToString(fileHash.Sum(nil)),
+		ChunkMD5s:  chunkMD5s,
+		ChunkSize:  chunkSize,
+		ChunkCount: len(chunkMD5s),
+		FileSize:   fileSize,
+	}, nil
+}
+
+const (
+	PartialMD5Size = 256 * 1024
+)
+
+func CalculateFilePartialMD5(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("打开文件失败: %v", err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("获取文件信息失败: %v", err)
+	}
+	fileSize := fileInfo.Size()
+
+	hash := md5.New()
+
+	if fileSize <= PartialMD5Size {
+		if _, err := io.Copy(hash, file); err != nil {
+			return "", fmt.Errorf("计算文件MD5失败: %v", err)
+		}
+	} else {
+		buf := make([]byte, PartialMD5Size)
+		n, err := file.Read(buf)
+		if err != nil && err != io.EOF {
+			return "", fmt.Errorf("读取文件失败: %v", err)
+		}
+		hash.Write(buf[:n])
+	}
+
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func ExtractFileChunkToTemp(filePath string, chunkSize int64, chunkIndex int) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("打开文件失败: %v", err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("获取文件信息失败: %v", err)
+	}
+	fileSize := fileInfo.Size()
+
+	if chunkSize <= 0 {
+		chunkSize = DefaultChunkSize
+	}
+
+	if chunkIndex < 0 {
+		return "", fmt.Errorf("分片序号无效: %d", chunkIndex)
+	}
+
+	offset := int64(chunkIndex) * chunkSize
+	if offset >= fileSize {
+		return "", fmt.Errorf("分片序号超出文件范围: %d", chunkIndex)
+	}
+
+	remaining := fileSize - offset
+	readSize := chunkSize
+	if remaining < chunkSize {
+		readSize = remaining
+	}
+
+	buf := make([]byte, readSize)
+	n, err := file.ReadAt(buf, offset)
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("读取文件分片失败: %v", err)
+	}
+
+	tempFile, err := os.CreateTemp("", "chunk_*")
+	if err != nil {
+		return "", fmt.Errorf("创建临时文件失败: %v", err)
+	}
+	defer tempFile.Close()
+
+	if _, err := tempFile.Write(buf[:n]); err != nil {
+		os.Remove(tempFile.Name())
+		return "", fmt.Errorf("写入临时文件失败: %v", err)
+	}
+
+	return tempFile.Name(), nil
 }

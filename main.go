@@ -374,6 +374,7 @@ func initLogger() {
 	helpers.V115Log = helpers.NewLogger(helpers.GlobalConfig.Log.V115, false, true)
 	helpers.OpenListLog = helpers.NewLogger(helpers.GlobalConfig.Log.OpenList, false, true)
 	helpers.TMDBLog = helpers.NewLogger(helpers.GlobalConfig.Log.TMDB, false, true)
+	helpers.BaiduPanLog = helpers.NewLogger(helpers.GlobalConfig.Log.BaiduPan, false, true)
 }
 
 func initOthers() {
@@ -392,8 +393,8 @@ func initOthers() {
 	models.GetEmbyConfig()           // 加载Emby配置
 	helpers.SubscribeSync(helpers.V115TokenInValidEvent, models.HandleV115TokenInvalid)
 	helpers.SubscribeSync(helpers.SaveOpenListTokenEvent, models.HandleOpenListTokenSaveSync)
-	models.FailAllRunningSyncTasks() // 将所有运行中的同步任务设置为失败状态
-	synccron.Refresh115AccessToken() // 启动时刷新一次115的访问凭证，防止有过期的token导致同步失败
+	models.FailAllRunningSyncTasks()   // 将所有运行中的同步任务设置为失败状态
+	synccron.RefreshOAuthAccessToken() // 启动时刷新一次115的访问凭证，防止有过期的token导致同步失败
 
 	// 设置115请求队列的统计保存回调函数
 	v115open.SetGlobalExecutorStatSaver(func(requestTime int64, url, method string, duration int64, isThrottled bool) {
@@ -468,14 +469,9 @@ func setRouter(r *gin.Engine) {
 		api.GET("/115/stats/hourly", controllers.GetRequestStatsByHour)  // 获取115请求统计（按小时）
 		api.POST("/115/stats/clean", controllers.CleanOldRequestStats)   // 清理旧的请求统计数据
 		// 百度网盘相关路由
-		api.GET("/baidupan/oauth-url", controllers.GetBaiDuPanOAuthUrl)               // 获取百度网盘OAuth登录地址
-		api.POST("/baidupan/oauth-confirm", controllers.ConfirmBaiDuPanOAuthCode)     // 确认百度网盘OAuth登录
-		api.GET("/baidupan/queue/stats", controllers.GetBaiDuPanQueueStats)           // 获取百度网盘请求队列统计数据
-		api.POST("/baidupan/queue/rate-limit", controllers.SetBaiDuPanQueueRateLimit) // 设置百度网盘请求队列速率限制
-		api.GET("/baidupan/stats/daily", controllers.GetBaiDuPanRequestStatsByDay)    // 获取百度网盘请求统计（按天）
-		api.GET("/baidupan/stats/hourly", controllers.GetBaiDuPanRequestStatsByHour)  // 获取百度网盘请求统计（按小时）
-		api.POST("/baidupan/stats/clean", controllers.CleanOldBaiDuPanRequestStats)   // 清理旧的百度网盘请求统计数据
-		api.GET("/auth/baidupan-status", controllers.GetBaiDuPanStatus)               // 查询百度网盘状态
+		api.GET("/baidupan/oauth-url", controllers.GetBaiDuPanOAuthUrl)           // 获取百度网盘OAuth登录地址
+		api.POST("/baidupan/oauth-confirm", controllers.ConfirmBaiDuPanOAuthCode) // 确认百度网盘OAuth登录
+		api.GET("/baidupan/status", controllers.GetBaiDuPanStatus)                // 查询百度网盘状态
 
 		api.GET("/update/last", controllers.GetLastRelease)         // 获取最新版本
 		api.POST("/update/to-version", controllers.UpdateToVersion) // 获取更新版本

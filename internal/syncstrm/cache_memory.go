@@ -54,8 +54,11 @@ func (sfc *SyncFileCache) GetPath() string {
 		return sfc.ParentId
 	case models.SourceType123:
 		return sfc.Path
+	case models.SourceTypeBaiduPan:
+		return sfc.Path
+	default:
+		return sfc.Path
 	}
-	return sfc.Path
 }
 
 func (sfc *SyncFileCache) GetFileId() string {

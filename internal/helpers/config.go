@@ -15,6 +15,7 @@ type configLog struct {
 	V115       string `yaml:"v115"`
 	OpenList   string `yaml:"openList"`
 	TMDB       string `yaml:"tmdb"`
+	BaiduPan   string `yaml:"baiduPan"`
 	Web        string `yaml:"web"`
 	SyncLogDir string `yaml:"syncLogDir"` // 同步任务的日志目录，每个同步任务会生成一个日志文件，文件名为任务ID
 }
@@ -29,14 +30,15 @@ type configStrm struct {
 	Cron         string   `yaml:"cron"` // 定时任务表达式
 }
 type Config struct {
-	Log              configLog  `yaml:"log"`
-	Db               configDb   `yaml:"db"`
-	JwtSecret        string     `yaml:"jwtSecret"`
-	WebHost          string     `yaml:"webHost"`
-	Strm             configStrm `yaml:"strm"`
-	Open115AppId     string     `yaml:"open115AppId"`
-	Open115TestAppId string     `yaml:"open115TestAppId"`
-	BaiDuPanAppId    string     `yaml:"baiDuPanAppId"`
+	Log                configLog  `yaml:"log"`
+	Db                 configDb   `yaml:"db"`
+	JwtSecret          string     `yaml:"jwtSecret"`
+	WebHost            string     `yaml:"webHost"`
+	Strm               configStrm `yaml:"strm"`
+	Open115AppId       string     `yaml:"open115AppId"`
+	Open115TestAppId   string     `yaml:"open115TestAppId"`
+	BaiDuPanAppId      string     `yaml:"baiDuPanAppId"`
+	BaiduPanAuthServer string     `yaml:"baiduPanAuthServer"`
 }
 
 var GlobalConfig Config
@@ -58,6 +60,7 @@ func InitConfig() error {
 			V115:     "logs/115.log",
 			OpenList: "logs/openList.log",
 			TMDB:     "logs/tmdb.log",
+			BaiduPan: "logs/baidupan.log",
 		},
 		Db: configDb{
 			File:      "db.db",
@@ -71,9 +74,10 @@ func InitConfig() error {
 			MetaExt:      []string{".jpg", ".jpeg", ".png", ".webp", ".gif", ".nfo", ".srt", ".ass", ".svg", ".sup", ".lrc"},
 			Cron:         "0 * * * *", // 默认每小时执行一次
 		},
-		Open115AppId:     "",
-		Open115TestAppId: "",
-		BaiDuPanAppId:    "QMediaSync",
+		Open115AppId:       "",
+		Open115TestAppId:   "",
+		BaiDuPanAppId:      "QMediaSync",
+		BaiduPanAuthServer: "https://api.mqfamily.top/baidupan/oauth-url",
 	}
 	return nil
 }

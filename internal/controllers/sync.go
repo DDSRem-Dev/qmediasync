@@ -4,6 +4,8 @@ import (
 	"Q115-STRM/internal/models"
 	"Q115-STRM/internal/synccron"
 	"net/http"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -209,13 +211,19 @@ func AddSyncPath(c *gin.Context) {
 	if req.SourceType != models.SourceTypeLocal {
 		remotePath = strings.TrimPrefix(req.RemotePath, "/")
 		remotePath = strings.TrimPrefix(req.RemotePath, "/")
+		remotePath = filepath.ToSlash(filepath.Clean(req.RemotePath))
 	}
-	if req.SourceType == models.SourceTypeOpenList {
-		// 将remotepath中的\都替换为/
-		remotePath = strings.ReplaceAll(remotePath, "\\", "/")
-		baseCid = strings.ReplaceAll(req.BaseCid, "\\", "/")
+	// 非windows+本地类型，remotePath需要以/开头
+	if runtime.GOOS != "windows" && req.SourceType == models.SourceTypeLocal {
+		if !strings.HasPrefix(remotePath, "/") {
+			remotePath = "/" + remotePath
+		}
 	}
-	remotePath = strings.Trim(remotePath, "/")
+	// if req.SourceType == models.SourceTypeOpenList {
+	// 	// 将remotepath中的\都替换为/
+	// 	remotePath = strings.ReplaceAll(remotePath, "\\", "/")
+	// 	baseCid = strings.ReplaceAll(req.BaseCid, "\\", "/")
+	// }
 	// 创建同步路径
 	syncPath := models.CreateSyncPath(req.SourceType, req.AccountId, baseCid, localPath, remotePath, req.EnableCron, req.CustomConfig, req.SyncPathSetting)
 	if syncPath == nil {
@@ -274,12 +282,24 @@ func UpdateSyncPath(c *gin.Context) {
 			return
 		}
 	}
+	remotePath := req.RemotePath
+	if req.SourceType != models.SourceTypeLocal {
+		remotePath = strings.TrimPrefix(req.RemotePath, "/")
+		remotePath = strings.TrimPrefix(req.RemotePath, "/")
+		remotePath = filepath.ToSlash(filepath.Clean(req.RemotePath))
+	}
+	// 非windows+本地类型，remotePath需要以/开头
+	if runtime.GOOS != "windows" && req.SourceType == models.SourceTypeLocal {
+		if !strings.HasPrefix(remotePath, "/") {
+			remotePath = "/" + remotePath
+		}
+	}
 	if req.SourceType == models.SourceTypeOpenList {
 		// 将remotepath中的\都替换为/
 		req.RemotePath = strings.ReplaceAll(req.RemotePath, "\\", "/")
 		req.BaseCid = strings.ReplaceAll(req.BaseCid, "\\", "/")
 	}
-	success := syncPath.Update(req.SourceType, req.AccountId, req.BaseCid, req.LocalPath, req.RemotePath, req.EnableCron, req.CustomConfig, req.SyncPathSetting)
+	success := syncPath.Update(req.SourceType, req.AccountId, req.BaseCid, req.LocalPath, remotePath, req.EnableCron, req.CustomConfig, req.SyncPathSetting)
 	if !success {
 		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "更新同步路径失败", Data: nil})
 		return

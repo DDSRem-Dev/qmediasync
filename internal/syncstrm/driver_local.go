@@ -1,6 +1,7 @@
 package syncstrm
 
 import (
+	"Q115-STRM/internal/baidupan"
 	"Q115-STRM/internal/helpers"
 	"Q115-STRM/internal/models"
 	"Q115-STRM/internal/v115open"
@@ -128,4 +129,8 @@ func (d *localDriver) DeleteFile(ctx context.Context, parentId string, fileIds [
 		}
 	}
 	return nil
+}
+
+func (d *localDriver) GetFilesByPathMtime(ctx context.Context, rootPathId string, offset, limit int, mtime int64) (*baidupan.FileListAllResponse, error) {
+	return nil, nil
 }

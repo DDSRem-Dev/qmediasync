@@ -105,7 +105,7 @@ type MediaSeason struct {
 	Status           MediaStatus `gorm:"index" json:"status"`                      // 状态
 }
 
-func (m *Media) Save() {
+func (m *Media) Save() error {
 	// 将所有字段转换为JSON字符串
 	m.ActorsJson = helpers.JsonString(m.Actors)
 	m.DirectorJson = helpers.JsonString(m.Director)
@@ -116,7 +116,9 @@ func (m *Media) Save() {
 	err := db.Db.Save(m).Error
 	if err != nil {
 		helpers.AppLogger.Errorf("保存Media到数据库失败: %v", err)
+		return err
 	}
+	return nil
 }
 
 func (m *Media) DecodeJson() {

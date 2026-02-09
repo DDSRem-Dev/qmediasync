@@ -89,8 +89,8 @@ func (account *Account) GetOpenListClient() *openlist.Client {
 	return openlist.NewClient(account.ID, account.BaseUrl, account.Username, account.Password, account.Token)
 }
 
-func (account *Account) GetBaiDuPanClient() *baidupan.BaiDuPanClient {
-	return baidupan.GetClient(account.ID, account.Token, account.RefreshToken)
+func (account *Account) GetBaiDuPanClient() *baidupan.Client {
+	return baidupan.NewBaiDuPanClient(account.ID, account.Token)
 }
 
 func (account *Account) Delete() error {

@@ -73,3 +73,12 @@ func GetFileByPickCode(pickCode string) *SyncFile {
 	}
 	return db115File
 }
+
+func GetFilesBySyncPathId(syncPathId uint, offset, limit int) ([]*SyncFile, error) {
+	var syncFiles []*SyncFile
+	err := db.Db.Model(&SyncFile{}).Where("sync_path_id = ?", syncPathId).Offset(offset).Limit(limit).Find(&syncFiles).Error
+	if err != nil {
+		return nil, err
+	}
+	return syncFiles, nil
+}

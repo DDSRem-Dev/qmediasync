@@ -1,167 +1,241 @@
 package baidupan
 
-import (
-	"time"
-)
-
-// RespBase 基础响应结构
-type RespBase[T any] struct {
-	State   int    `json:"state"`
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Data    T      `json:"data"`
+// 错误码	描述	排查方向
+// -1	权益已过期	权益已过期
+// -3	文件不存在	文件不存在
+// -6	身份验证失败	1.access_token 是否有效;
+// 2.授权是否成功；
+// 3.参考接入授权FAQ；
+// 4.阅读文档《使用入门->接入授权》章节。
+// -7	文件或目录名错误或无权访问	文件或目录名有误
+// -8	文件或目录已存在	--
+// -9	文件或目录不存在	--
+// 0	请求成功	成功了
+// 2	参数错误	1.检查必选参数是否都已填写；
+// 2.检查参数位置，有的参数是在url里，有的是在body里；
+// 3.检查每个参数的值是否正确
+// 6	不允许接入用户数据	建议10分钟之后用户再进行授权重试。
+// 10	转存文件已经存在	转存文件已经存在
+// 11	用户不存在(uid不存在)	--
+// 12	批量转存出错	参数错误，检查转存源和目的是不是同一个uid，正常不应该是一个 uid
+// 111	有其他异步任务正在执行	稍后，可重新请求
+// 133	播放广告	稍后，可重新请求
+// 255	转存数量太多	转存数量太多
+// 2131	该分享不存在	检查tag是否传的一个空文件夹
+// 20011	应用审核中，仅限前10个完成OAuth授权的用户测试应用	完成应用上线审核，可放开授权用户数限制
+// 20012	访问超限，调用次数已达上限，触发限流	1.检查是否完成应用上线审核，通过审核前，仅限用于测试开发
+// 2.检查调用频率是否异常
+// 20013	权限不足，当前应用无接口权限	1.检查是否完成应用上线审核，通过审核前，可能没有该接口权限
+// 2.检查应用上线审核时是否申请该接口权限
+// 3.重新发起上线审核，申请对应接口权限
+// 31023	参数错误	1.检查必选参数是否都已填写；
+// 2.检查参数位置，有的参数是在url里，有的是在body里；
+// 3.检查每个参数的值是否正确
+// 31024	没有访问权限	检查授权应用方式
+// 31034	命中接口频控	接口请求过于频繁，注意控制
+// 31045	access_token验证未通过	请检查access_token是否过期，用户授权时是否勾选网盘权限等
+// 31061	文件已存在	--
+// 31062	文件名无效	检查是否包含特殊字符
+// 31064	上传路径错误	上传文件的绝对路径格式：/apps/申请接入时填写的产品名称请参考《能力说明->限制条件->目录限制》
+// 31066	文件名不存在	排查文件是否存储，路径是否传错
+// 31190	文件不存在	1.block_list参数是否正确；
+// 2.一般是分片上传阶段有问题；
+// 3.检查分片上传阶段，分片传完了么；
+// 4.size大小对不对，跟实际文件是否一致，跟预上传接口的size是否一致；
+// 5.对照文档好好检查一下每一步相关的参数及值是否正确。
+// 31299	第一个分片的大小小于4MB	要等于4MB
+// 31301	非音视频文件	文件类型是否是音视频
+// 31304	视频格式不支持播放	--
+// 31326	命中防盗链	查看自己请求是否合理，User-Agent请求头是否正常
+// 31338	当前视频码率太高暂不支持流畅播放	用户下载后播放
+// 31339	非法媒体文件	检查视频内容
+// 31341	视频正在转码	可重新请求
+// 31346	视频转码失败	排查该文件是否是个正常的视频
+// 31347	当前视频太长，暂不支持在线播放	建议用户下载后播放
+// 31355	参数异常	一般是 uploadid 参数传的有问题，确认uploadid参数传的是否与预上传precreate接口下发的uploadid一致
+// 31360	url过期	请重新获取
+// 31362	签名错误	请检查链接地址是否完整
+// 31363	分片缺失	1.分片是否全部上传；每个上传的分片是否正确；
+// 2.size大小是否正确，跟实际文件是否一致，跟预上传接口的size是否一致；
+// 3.对照文档好好检查一下每一步相关的参数及值是否正确
+// 31364	超出分片大小限制	建议以4MB作为上限
+// 31365	文件总大小超限	授权用户为普通用户时，单个分片大小固定为4MB，单文件总大小上限为4GB
+// 授权用户为普通会员时，单个分片大小上限为16MB，单文件总大小上限为10GB
+// 授权用户为超级会员时，用户单个分片大小上限为32MB，单文件总大小上限为20GB
+// 31649	字幕不存在	--
+// 42202	文件个数超过相册容量上限	--
+// 42203	相册不存在	--
+// 42210	部分文件添加失败	--
+// 42211	获取图片分辨率失败	--
+// 42212	共享目录文件上传者信息查询失败	--
+// 42213	共享目录鉴权失败	没有共享目录的权限
+// 42214	获取文件详情失败	--
+// 42905	查询用户名失败	可重试
+// 50002	播单id不存在	异常处理 或者 获取正确的播单id
+var ErrorMap map[int64]string = map[int64]string{
+	-1:    "权益已过期",
+	-3:    "文件不存在",
+	-6:    "身份验证失败",
+	-7:    "文件或目录名错误或无权访问",
+	-8:    "文件或目录已存在",
+	-9:    "文件或目录不存在",
+	0:     "请求成功",
+	2:     "参数错误",
+	6:     "不允许接入用户数据",
+	10:    "转存文件已经存在",
+	11:    "用户不存在(uid不存在)",
+	12:    "批量转存出错",
+	111:   "有其他异步任务正在执行",
+	133:   "播放广告",
+	255:   "转存数量太多",
+	2131:  "该分享不存在",
+	20011: "应用审核中，仅限前10个完成OAuth授权的用户测试应用",
+	20012: "访问超限，调用次数已达上限，触发限流",
+	20013: "权限不足，当前应用无接口权限",
+	31023: "参数错误",
+	31024: "没有访问权限",
+	31034: "命中接口频控",
+	31045: "access_token验证未通过",
+	31061: "文件已存在",
+	31062: "文件名无效",
+	31064: "上传路径错误",
+	31066: "文件名不存在",
+	31190: "文件不存在",
+	31299: "第一个分片的大小小于4MB",
+	31301: "非音视频文件",
+	31304: "视频格式不支持播放",
+	31326: "命中防盗链",
+	31338: "当前视频码率太高暂不支持流畅播放",
+	31339: "非法媒体文件",
+	31341: "视频正在转码",
+	31346: "视频转码失败",
+	31347: "当前视频太长，暂不支持在线播放",
+	31355: "参数异常",
+	31360: "url过期",
+	31362: "签名错误",
+	31363: "分片缺失",
+	31364: "超出分片大小限制",
+	31365: "文件总大小超限",
+	31649: "字幕不存在",
+	42202: "文件个数超过相册容量上限",
+	42203: "相册不存在",
+	42210: "部分文件添加失败",
+	42211: "获取图片分辨率失败",
+	42212: "共享目录文件上传者信息查询失败",
+	42213: "共享目录鉴权失败",
+	42214: "获取文件详情失败",
+	42905: "查询用户名失败",
+	50002: "播单id不存在",
 }
 
-// RespBaseBool 基础响应结构（布尔状态）
-type RespBaseBool[T any] struct {
-	State   bool   `json:"state"`
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Data    T      `json:"data"`
-}
-
-// RequestConfig 请求配置
-type RequestConfig struct {
-	MaxRetries      int           `json:"max_retries"`
-	RetryDelay      time.Duration `json:"retry_delay"`
-	Timeout         time.Duration `json:"timeout"`
-	BypassRateLimit bool          `json:"bypass_rate_limit"` // 是否绕过速率限制
-}
-
-// DefaultRequestConfig 默认请求配置
-func DefaultRequestConfig() *RequestConfig {
-	return &RequestConfig{
-		MaxRetries: DEFAULT_MAX_RETRIES,
-		RetryDelay: DEFAULT_RETRY_DELAY * time.Second,
-		Timeout:    DEFAULT_TIMEOUT * time.Second,
-	}
-}
-
-func MakeRequestConfig(maxRetries int, retryDelay time.Duration, timeout time.Duration) *RequestConfig {
-	config := DefaultRequestConfig()
-	if maxRetries > 0 {
-		config.MaxRetries = maxRetries
-	}
-	if retryDelay > 0 {
-		config.RetryDelay = retryDelay * time.Second
-	}
-	if timeout > 0 {
-		config.Timeout = timeout * time.Second
-	}
-	return config
-}
-
-// RateLimitConfig 限速配置
-type RateLimitConfig struct {
-	QPSLimit int64 // 每秒请求数限制
-	QPMLimit int64 // 每分钟请求数限制
-	QPHLimit int64 // 每小时请求数限制
-	QPTLimit int64 // 每天请求数限制
-}
-
-// DefaultRateLimitConfig 默认限速配置
-func DefaultRateLimitConfig() *RateLimitConfig {
-	return &RateLimitConfig{
-		QPSLimit: DEFAULT_QPS_LIMIT,
-		QPMLimit: DEFAULT_QPM_LIMIT,
-		QPHLimit: DEFAULT_QPH_LIMIT,
-		QPTLimit: DEFAULT_QPT_LIMIT,
-	}
-}
-
-// UserInfoResponse 用户信息响应
-type UserInfoResponse struct {
-	AvatarUrl   string `json:"avatar_url"`
-	CreateTime  int64  `json:"create_time"`
-	Email       string `json:"email"`
-	Level       int    `json:"level"`
-	Nickname    string `json:"nickname"`
-	Quota       int64  `json:"quota"`        // 总空间(字节)
-	Used        int64  `json:"used"`         // 已用空间(字节)
-	Username    string `json:"username"`
-	VipType     int    `json:"vip_type"`
-	NetDiskName string `json:"netdisk_name"`
-	UserId      string `json:"uk"`
-}
-
-// FileInfo 文件信息
+// fs_id	uint64	文件在云端的唯一标识ID
+// path	string	文件的绝对路径
+// server_filename	string	文件名称
+// size	uint	文件大小，单位B
+// server_mtime	uint	文件在服务器修改时间
+// server_ctime	uint	文件在服务器创建时间
+// local_mtime	uint	文件在客户端修改时间
+// local_ctime	uint	文件在客户端创建时间
+// isdir	uint	是否为目录，0 文件、1 目录
+// category	uint	文件类型，1 视频、2 音频、3 图片、4 文档、5 应用、6 其他、7 种子
+// md5	string	云端哈希（非文件真实MD5），只有是文件类型时，该字段才存在
+// dir_empty	int	该目录是否存在子目录，只有请求参数web=1且该条目为目录时，该字段才存在， 0为存在， 1为不存在
+// thumbs	array	只有请求参数web=1且该条目分类为图片时，该字段才存在，包含三个尺寸的缩略图URL；不传web参数，则不返回缩略图地址
 type FileInfo struct {
-	Ctime        int64  `json:"ctime"`         // 创建时间
-	FsID         int64  `json:"fs_id"`         // 文件系统ID
-	IsDir        int    `json:"isdir"`         // 是否为目录
-	List         int    `json:"list"`          // 子目录数量
-	Mtime        int64  `json:"mtime"`         // 修改时间
-	Path         string `json:"path"`          // 路径
-	ServerCtime  int64  `json:"server_ctime"`  // 服务器创建时间
-	ServerMtime  int64  `json:"server_mtime"`  // 服务器修改时间
-	Size         int64  `json:"size"`          // 文件大小(字节)
-	Category     int    `json:"category"`      // 文件类别
-	OwnerType    int    `json:"owner_type"`    // 所有者类型
-	Thumbs       map[string]string `json:"thumbs"`
-	OperID       int64  `json:"oper_id"`       // 操作者ID
-	Share        int    `json:"share"`         // 共享状态
-	Extra        string `json:"extra"`         // 扩展信息
-	Md5          string `json:"md5"`           // 文件MD5
+	FsId           uint64 `json:"fs_id"`
+	Path           string `json:"path"`
+	ServerFilename string `json:"server_filename"`
+	Size           uint64 `json:"size"`
+	ServerMtime    uint64 `json:"server_mtime"`
+	ServerCtime    uint64 `json:"server_ctime"`
+	LocalMtime     uint64 `json:"local_mtime"`
+	LocalCtime     uint64 `json:"local_ctime"`
+	IsDir          uint32 `json:"isdir"`
+	Category       uint32 `json:"category"`
+	Md5            string `json:"md5"`
+	DirEmpty       uint32 `json:"dir_empty"`
 }
 
-// FileListResponse 文件列表响应
 type FileListResponse struct {
-	HasMore   int        `json:"has_more"`   // 是否还有更多
-	List      []FileInfo `json:"list"`       // 文件列表
-	PageNum   int        `json:"page_num"`   // 当前页码
-	PageTotal int        `json:"page_total"` // 总页数
+	Errno     int32       `json:"errno"`
+	GuidInfo  string      `json:"guid_info"`
+	List      []*FileInfo `json:"list"`
+	RequestId int64       `json:"request_id"`
+	Guid      int64       `json:"guid"`
 }
 
-// UploadResponse 上传响应
-type UploadResponse struct {
-	Path  string `json:"path"` // 文件路径
-	Size  int64  `json:"size"` // 文件大小
-	FSID  int64  `json:"fs_id"` // 文件系统ID
-	Mtime int64  `json:"mtime"` // 修改时间
-	Ctime int64  `json:"ctime"` // 创建时间
-	MD5   string `json:"md5"`   // 文件MD5
+// 参数名称	类型	描述
+// list	json array	文件信息列表
+// names	json	如果查询共享目录，该字段为共享目录文件上传者的uk和账户名称
+// list[0] ["category"]	int	文件类型，含义如下：1 视频， 2 音乐，3 图片，4 文档，5 应用，6 其他，7 种子
+// list[0] ["dlink”]	string	文件下载地址，参考下载文档进行下载操作。注意unicode解码处理。
+// list[0] ["filename”]	string	文件名
+// list[0] ["isdir”]	int	是否是目录，为1表示目录，为0表示非目录
+// list[0] ["server_ctime”]	int	文件的服务器创建Unix时间戳，单位秒
+// list[0] ["server_mtime”]	int	文件的服务器修改Unix时间戳，单位秒
+// list[0] ["size”]	int	文件大小，单位字节
+// list[0] ["thumbs”]	object	缩略图地址，包含四种分辨率。详细尺寸参考响应示例
+// list[0] ["height”]	int	图片高度
+// list[0] ["width”]	int	图片宽度
+// list[0] ["date_taken”]	int	图片拍摄时间
+// list[0] ["orientation”]	string	图片旋转方向信息
+// list[0] ["media_info”]	object	视频信息。
+type FileDetail struct {
+	Category    uint32 `json:"category"`
+	Dlink       string `json:"dlink"`
+	FileName    string `json:"filename"`
+	IsDir       uint32 `json:"isdir"`
+	ServerCtime uint64 `json:"server_ctime"`
+	ServerMtime uint64 `json:"server_mtime"`
+	Size        uint64 `json:"size"`
 }
 
-// PrecreateResponse 预创建响应
-type PrecreateResponse struct {
-	Path      string `json:"path"` // 上传路径
-	UploadID  string `json:"uploadid"` // 上传ID
-	BlockList []struct {
-		MD5 string `json:"md5"`
-	} `json:"block_list"`
-	ReturnType int `json:"return_type"` // 返回类型
+type FileDetailResponse struct {
+	List []*FileDetail `json:"list"`
 }
 
-// UploadSliceResponse 分片上传响应
-type UploadSliceResponse struct {
-	MD5      string `json:"md5"`       // 分片MD5
-	Offset   int64  `json:"offset"`    // 偏移量
-	SliceMD5 string `json:"slice_md5"` // 分片MD5
+//	{
+//	    "cursor": 5,
+//	    "errmsg": "succ",
+//	    "errno": 0,
+//	    "has_more": 1,
+//	    "list": [
+//	        {
+//	            "category": 4,
+//	            "fs_id": 30995775581277,
+//	            "isdir": 0,
+//	            "local_ctime": 1547097900,
+//	            "local_mtime": 1547097900,
+//	            "md5": "540b49455n2f04f55c3929eb8b0c0445",
+//	            "path": "/测试目录/20160820.txt",
+//	            "server_ctime": 1578310087,
+//	            "server_filename": "20160820.txt",
+//	            "server_mtime": 1596078161,
+//	            "size": 1120,
+//	            "thumbs": {
+//	                "url1": "https://thumbnail0.baidupcs.com/thumbnail/540b49455n2f04f55c3929eb8b0c0445?fid=2082810368-250528-30995775581277&rt=pr&sign=FDTAER-DCb740ccc5511e5e8fedcff06b081203-VDkr1qdq%2BXPk79PIL5SHCADhEnk%3D&expires=8h&chkbd=0&chkv=0&dp-logid=4193316540243014694&dp-callid=0&time=1596092400&size=c140_u90&quality=100",
+//	                "url2": "https://thumbnail0.baidupcs.com/thumbnail/540b49455n2f04f55c3929eb8b0c0445?fid=2082810368-250528-30995775581277&rt=pr&sign=FDTAER-DCb740ccc5511e5e8fedcff06b081203-VDkr1qdq%2BXPk79PIL5SHCADhEnk%3D&expires=8h&chkbd=0&chkv=0&dp-logid=4193316540243014694&dp-callid=0&time=1596092400&size=c360_u270&quality=100",
+//	                "url3": "https://thumbnail0.baidupcs.com/thumbnail/540b49455n2f04f55c3929eb8b0c0445?fid=2082810368-250528-30995775581277&rt=pr&sign=FDTAER-DCb740ccc5511e5e8fedcff06b081203-VDkr1qdq%2BXPk79PIL5SHCADhEnk%3D&expires=8h&chkbd=0&chkv=0&dp-logid=4193316540243014694&dp-callid=0&time=1596092400&size=c850_u580&quality=100"
+//	            }
+//	        },
+//		}
+//	}
+type FileListAllItem struct {
+	Category       uint32 `json:"category"`
+	FsId           uint64 `json:"fs_id"`
+	IsDir          uint32 `json:"isdir"`
+	LocalCtime     uint64 `json:"local_ctime"`
+	LocalMtime     uint64 `json:"local_mtime"`
+	Md5            string `json:"md5"`
+	Path           string `json:"path"`
+	ServerCtime    uint64 `json:"server_ctime"`
+	ServerFilename string `json:"server_filename"`
+	ServerMtime    uint64 `json:"server_mtime"`
+	Size           uint64 `json:"size"`
 }
 
-// CreateFileResponse 创建文件响应
-type CreateFileResponse struct {
-	Path  string `json:"path"` // 文件路径
-	FSID  int64  `json:"fs_id"` // 文件系统ID
-	Size  int64  `json:"size"` // 文件大小
-	Ctime int64  `json:"ctime"` // 创建时间
-	Mtime int64  `json:"mtime"` // 修改时间
-	MD5   string `json:"md5"`   // 文件MD5
-}
-
-// FileManagerResponse 文件管理响应
-type FileManagerResponse struct {
-	Extra struct {
-		List []struct {
-			To   string `json:"to"`
-			From string `json:"from"`
-		} `json:"list"`
-	} `json:"extra"`
-	List []FileInfo `json:"list"`
-}
-
-// DownloadResponse 下载响应
-type DownloadResponse struct {
-	DownloadURL string `json:"download_url"` // 下载链接
-	ExpireTime  int64  `json:"expire_time"`  // 过期时间
+type FileListAllResponse struct {
+	Cursor  uint32             `json:"cursor"`
+	HasMore uint32             `json:"has_more"`
+	List    []*FileListAllItem `json:"list"`
 }

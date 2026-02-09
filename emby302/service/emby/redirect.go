@@ -145,7 +145,8 @@ func Redirect2OpenlistLink(c *gin.Context) {
 	// 2. 以windows盘符开头, 正则匹配
 	pattern := `^[A-Za-z]:`
 	matchedWin, _ := regexp.MatchString(pattern, embyPath)
-	if strings.HasPrefix(embyPath, "/") || matchedWin {
+	// \\开头是Emby网络共享地址
+	if strings.HasPrefix(embyPath, "/") || matchedWin || strings.HasPrefix(embyPath, "\\") {
 		logs.Info("本地媒体: %s, 回源处理", embyPath)
 		newUri := strings.Replace(c.Request.RequestURI, "stream", "original", 1)
 		newUri = strings.Replace(newUri, "universal", "original", 1)

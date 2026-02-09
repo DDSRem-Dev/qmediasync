@@ -143,6 +143,10 @@ func (task *DbUploadTask) Upload() {
 		if !task.UploadLocalFile() {
 			return
 		}
+	case SourceTypeBaiduPan:
+		if !task.UploadBaiduPanFile() {
+			return
+		}
 	default:
 		task.Fail(fmt.Errorf("未知的上传来源类型 %s", task.SourceType))
 		return
@@ -255,6 +259,32 @@ func (task *DbUploadTask) Upload115File() bool {
 	// 	}
 	// 	return true
 	// }
+	return true
+}
+
+// 百度网盘上传文件
+func (task *DbUploadTask) UploadBaiduPanFile() bool {
+	// 检查账户是否存在
+	account := task.GetAccount()
+	if account == nil {
+		task.Fail(fmt.Errorf("账户 %d 不存在", task.AccountId))
+		return false
+	}
+	// 上传文件
+	client := account.GetBaiDuPanClient()
+	if client == nil {
+		task.Fail(fmt.Errorf("账户 %s 百度网盘客户端不存在", account.Name))
+		return false
+	}
+	task.Uploading()
+	// 调用上传方法
+	err := client.Upload(context.Background(), task.LocalFullPath, task.RemoteFileId)
+	if err != nil {
+		task.Fail(fmt.Errorf("百度网盘上传文件 %s 失败: %v", task.FileName, err))
+		return false
+	}
+	// 标记为已完成
+	task.Complete()
 	return true
 }
 

@@ -2,567 +2,357 @@ package baidupan
 
 import (
 	"Q115-STRM/internal/helpers"
+	openapiclient "Q115-STRM/openxpanapi"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
-
-	"resty.dev/v3"
 )
 
-// BaiDuPanClient 百度网盘客户端
-type BaiDuPanClient struct {
-	AccountId       uint // 账号ID
-	client          *resty.Client
-	AccessToken     string // 访问令牌
-	RefreshTokenStr string // 刷新令牌
-	throttleManager *ThrottleManager
-	stats           *RequestStats
+type Client struct {
+	client      *openapiclient.APIClient
+	accessToken string
+}
+
+// 解析响应
+type RefreshResponse struct {
+	AccessToken  string `json:"access_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 // 全局HTTP客户端实例
-var cachedClients map[string]*BaiDuPanClient = make(map[string]*BaiDuPanClient, 0)
+var cachedClients map[string]*Client = make(map[string]*Client, 0)
 var cachedClientsMutex sync.RWMutex
 
-// 全局请求队列执行器
-var globalExecutor *RequestQueueExecutor
-var executorOnce sync.Once
-
-// RequestQueueExecutor 请求队列执行器
-type RequestQueueExecutor struct {
-	queue           *RequestQueue
-	throttleManager *ThrottleManager
-	stats           *RequestStats
-	wg              sync.WaitGroup
-	ctx             context.Context
-	cancel          context.CancelFunc
-}
-
-// GetGlobalExecutor 获取全局请求队列执行器
-func GetGlobalExecutor() *RequestQueueExecutor {
-	executorOnce.Do(func() {
-		stats := NewRequestStats(10000)
-		// 使用默认限速配置，避免与models模块的循环引用
-		rateLimit := &RateLimitConfig{
-			QPSLimit: int64(10),     // 默认值
-			QPMLimit: int64(600),    // 默认值
-			QPHLimit: int64(36000),  // 默认值
-			QPTLimit: int64(864000), // 默认值
-		}
-
-		throttleManager := NewThrottleManager(rateLimit, stats)
-		ctx, cancel := context.WithCancel(context.Background())
-		globalExecutor = &RequestQueueExecutor{
-			queue:           NewRequestQueue(),
-			throttleManager: throttleManager,
-			stats:           stats,
-			ctx:             ctx,
-			cancel:          cancel,
-		}
-		globalExecutor.start()
-	})
-	return globalExecutor
-}
-
-// start 启动请求队列执行器
-func (e *RequestQueueExecutor) start() {
-	e.wg.Add(1)
-	go func() {
-		defer e.wg.Done()
-		for {
-			select {
-			case <-e.ctx.Done():
-				return
-			default:
-				req := e.queue.Dequeue()
-				if req == nil {
-					time.Sleep(10 * time.Millisecond)
-					continue
-				}
-				e.processRequest(req)
-			}
-		}
-	}()
-}
-
-// EnqueueRequest 入队请求
-func (e *RequestQueueExecutor) EnqueueRequest(req *QueuedRequest) {
-	e.queue.Enqueue(req)
-}
-
-// processRequest 处理请求
-func (e *RequestQueueExecutor) processRequest(req *QueuedRequest) {
-	startTime := time.Now()
-
-	// 检查限速（除非绕过）
-	if !req.BypassRateLimit {
-		isThrottled, reason := e.throttleManager.CheckRateLimit()
-		if isThrottled {
-			e.throttleManager.MarkThrottled(reason)
-			resp := &RequestResponse{
-				Error:       fmt.Errorf("百度网盘API限速: %s", reason),
-				IsThrottled: true,
-				Duration:    time.Since(startTime).Milliseconds(),
-			}
-			// 记录限流请求
-			e.stats.RecordRequest(RequestLogEntry{
-				Timestamp:   startTime,
-				Duration:    resp.Duration,
-				IsThrottled: true,
-				URL:         req.URL,
-				Method:      req.Method,
-			})
-			req.ResponseChan <- resp
-			return
-		}
-	}
-
-	// 执行请求
-	var response *resty.Response
-	var err error
-	var respData *RespBaseBool[json.RawMessage]
-	var respBytes []byte
-
-	switch req.Method {
-	case "GET":
-		response, err = req.Request.Get(req.URL)
-	case "POST":
-		response, err = req.Request.Post(req.URL)
-	default:
-		err = fmt.Errorf("unsupported HTTP method: %s", req.Method)
-	}
-
-	// 处理响应
-	if err == nil && response != nil {
-		// 解析响应
-		defer response.Body.Close()
-		resBytes, ioErr := io.ReadAll(response.Body)
-		if ioErr != nil {
-			helpers.AppLogger.Errorf("读取响应失败: %s", ioErr.Error())
-		} else {
-			respBytes = resBytes
-			respData = &RespBaseBool[json.RawMessage]{}
-			if jsonErr := json.Unmarshal(respBytes, respData); jsonErr != nil {
-				helpers.AppLogger.Errorf("解析响应失败: %s", jsonErr.Error())
-			}
-		}
-	}
-
-	// 检查是否是限流响应
-	isThrottled := false
-	if respData != nil && respData.Code == REQUEST_MAX_LIMIT_CODE {
-		isThrottled = true
-		e.throttleManager.MarkThrottled("API返回限流错误")
-	}
-
-	// 记录请求
-	duration := time.Since(startTime).Milliseconds()
-	e.stats.RecordRequest(RequestLogEntry{
-		Timestamp:   startTime,
-		Duration:    duration,
-		IsThrottled: isThrottled,
-		URL:         req.URL,
-		Method:      req.Method,
-	})
-
-	// 返回响应
-	resp := &RequestResponse{
-		Response:    response,
-		RespData:    respData,
-		RespBytes:   respBytes,
-		Error:       err,
-		Duration:    duration,
-		IsThrottled: isThrottled,
-	}
-	req.ResponseChan <- resp
-}
-
-// UpdateToken 更新令牌
-func UpdateToken(accountId uint, token string, refreshToken string) {
-	for key, client := range cachedClients {
-		if client.AccountId == accountId {
-			client.SetAuthToken(token, refreshToken)
-			helpers.AppLogger.Infof("更新百度网盘客户端 %s 的token成功", key)
-		}
-	}
-}
-
-// GetClient 获取百度网盘客户端
-func GetClient(accountId uint, token string, refreshToken string) *BaiDuPanClient {
+func NewBaiDuPanClient(accountId uint, accessToken string) *Client {
 	cachedClientsMutex.RLock()
 	defer cachedClientsMutex.RUnlock()
 	clientKey := fmt.Sprintf("%d", accountId)
 	if client, exists := cachedClients[clientKey]; exists {
-		client.SetAuthToken(token, refreshToken)
+		client.accessToken = accessToken
 		return client
 	}
-
-	client := resty.New()
-	stats := NewRequestStats(10000)
-	rateLimit := DefaultRateLimitConfig()
-	throttleManager := NewThrottleManager(rateLimit, stats)
-	baiduClient := &BaiDuPanClient{
-		client:          client,
-		AccountId:       accountId,
-		throttleManager: throttleManager,
-		stats:           stats,
+	config := openapiclient.NewConfiguration()
+	// if !helpers.IsRelease {
+	// 	config.Debug = true
+	// }
+	apiClient := openapiclient.NewAPIClient(config)
+	client := &Client{
+		client:      apiClient,
+		accessToken: accessToken,
 	}
-	baiduClient.SetAuthToken(token, refreshToken)
-	cachedClients[clientKey] = baiduClient
-	return baiduClient
+	cachedClients[clientKey] = client
+	return client
 }
 
-// SetAuthToken 设置认证令牌
-func (c *BaiDuPanClient) SetAuthToken(token string, refreshToken string) {
-	c.AccessToken = token
-	c.RefreshTokenStr = refreshToken
-}
-
-// request 执行HTTP请求的核心方法
-func (c *BaiDuPanClient) request(url string, req *resty.Request) (*resty.Response, *RespBase[json.RawMessage], error) {
-	// 检查限速
-	isThrottled, reason := c.throttleManager.CheckRateLimit()
-	if isThrottled {
-		c.throttleManager.MarkThrottled(reason)
-		return nil, nil, fmt.Errorf("百度网盘API限速: %s", reason)
+func RefreshToken(accountId uint, refreshToken string) (*RefreshResponse, error) {
+	// 生成state参数
+	type stateData struct {
+		Time         int64  `json:"time"`
+		RefreshToken string `json:"refresh_token"`
 	}
-
-	req.SetResult(&RespBase[json.RawMessage]{}).SetForceResponseContentType("application/json")
-	var response *resty.Response
-	var err error
-	method := req.Method
-	switch method {
-	case "GET":
-		response, err = req.Get(url)
-	case "POST":
-		response, err = req.Post(url)
-	default:
-		return nil, nil, fmt.Errorf("unsupported HTTP method: %s", method)
+	stateObj := stateData{
+		Time:         time.Now().Unix(),
+		RefreshToken: refreshToken,
 	}
-	result := response.Result()
-	resp := result.(*RespBase[json.RawMessage])
+	stateJson, _ := json.Marshal(stateObj)
+	stateEncoded, err := helpers.Encrypt(string(stateJson))
 	if err != nil {
-		return response, resp, err
+		return nil, err
 	}
-	helpers.AppLogger.Infof("非认证访问 %s %s\nstate=%d, code=%d, msg=%s, data=%s\n", req.Method, req.URL, resp.State, resp.Code, resp.Message, string(resp.Data))
-	switch resp.Code {
-	case REFRESH_TOKEN_INVALID:
-		return response, nil, fmt.Errorf("token invalid")
-	case REQUEST_MAX_LIMIT_CODE:
-		// 访问频率过高
-		c.throttleManager.MarkThrottled("API返回限流错误")
-		return response, nil, fmt.Errorf("访问频率过高")
-	}
-
-	return response, resp, nil
-}
-
-// doRequest 带重试的请求方法（使用全局队列）
-func (c *BaiDuPanClient) doRequest(url string, req *resty.Request, options *RequestConfig) (*resty.Response, *RespBase[json.RawMessage], error) {
-	// 检查限速
-	if !options.BypassRateLimit {
-		isThrottled, reason := c.throttleManager.CheckRateLimit()
-		if isThrottled {
-			c.throttleManager.MarkThrottled(reason)
-			return nil, nil, fmt.Errorf("百度网盘API限速: %s", reason)
-		}
-	}
-
-	// 设置超时时间
-	req.SetTimeout(options.Timeout)
-	// 设置默认头
-	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-	}
-
-	var lastErr error
-	for attempt := 0; attempt <= options.MaxRetries; attempt++ {
-		// 使用全局队列执行器处理请求
-		executor := GetGlobalExecutor()
-		respChan := make(chan *RequestResponse, 1)
-
-		queuedReq := &QueuedRequest{
-			URL:             url,
-			Method:          req.Method,
-			Request:         req,
-			BypassRateLimit: options.BypassRateLimit,
-			ResponseChan:    respChan,
-			CreatedAt:       time.Now(),
-			Ctx:             context.Background(),
-		}
-
-		// 将请求加入队列
-		executor.EnqueueRequest(queuedReq)
-
-		// 等待响应
-		queueResp := <-respChan
-
-		if queueResp.Error == nil && queueResp.RespData != nil {
-			// 请求成功，转换为RespBase格式
-			respBase := &RespBase[json.RawMessage]{
-				State:   0,
-				Code:    queueResp.RespData.Code,
-				Message: queueResp.RespData.Message,
-				Data:    queueResp.RespData.Data,
-			}
-			if queueResp.RespData.State {
-				respBase.State = 1
-			}
-			return queueResp.Response, respBase, nil
-		}
-
-		lastErr = queueResp.Error
-
-		// Token相关错误不重试
-		if queueResp.RespData != nil {
-			switch queueResp.RespData.Code {
-			case REFRESH_TOKEN_INVALID:
-				// 转换为RespBase格式返回
-				respBase := &RespBase[json.RawMessage]{
-					State:   0,
-					Code:    queueResp.RespData.Code,
-					Message: queueResp.RespData.Message,
-					Data:    queueResp.RespData.Data,
-				}
-				if queueResp.RespData.State {
-					respBase.State = 1
-				}
-				return queueResp.Response, respBase, lastErr
-			}
-		}
-
-		// 如果是限流错误，不重试
-		if queueResp.IsThrottled {
-			helpers.AppLogger.Warn("检测到限流，停止重试")
-			if queueResp.RespData != nil {
-				respBase := &RespBase[json.RawMessage]{
-					State:   0,
-					Code:    queueResp.RespData.Code,
-					Message: queueResp.RespData.Message,
-					Data:    queueResp.RespData.Data,
-				}
-				if queueResp.RespData.State {
-					respBase.State = 1
-				}
-				return queueResp.Response, respBase, lastErr
-			}
-			return queueResp.Response, nil, lastErr
-		}
-
-		// 其他错误开始重试
-		if attempt < options.MaxRetries && lastErr != nil {
-			helpers.AppLogger.Warnf("%s %s 请求失败:%+v", req.Method, url, lastErr)
-			helpers.AppLogger.Warnf("%s %s 请求失败，%+v秒后重试 (第%d次尝试)", req.Method, url, options.RetryDelay.Seconds(), attempt+1)
-			time.Sleep(options.RetryDelay)
-		}
-	}
-	return nil, nil, lastErr
-}
-
-// authRequest 执行HTTP请求的核心方法
-func (c *BaiDuPanClient) authRequest(ctx context.Context, url string, req *resty.Request, respData any, options *RequestConfig) (*resty.Response, []byte, error) {
-	// 检查限速
-	if !options.BypassRateLimit {
-		isThrottled, reason := c.throttleManager.CheckRateLimit()
-		if isThrottled {
-			c.throttleManager.MarkThrottled(reason)
-			return nil, nil, fmt.Errorf("百度网盘API限速: %s", reason)
-		}
-	}
-
-	helpers.AppLogger.Debugf("执行认证请求: %s %s", req.Method, url)
-	req.SetForceResponseContentType("application/json")
-	var response *resty.Response
-	var err error
-	method := req.Method
-	req.SetContext(ctx)
-	req.SetAuthToken(c.AccessToken).SetDoNotParseResponse(true)
-	switch method {
-	case "GET":
-		response, err = req.Get(url)
-	case "POST":
-		response, err = req.Post(url)
-	default:
-		return nil, nil, fmt.Errorf("unsupported HTTP method: %s", method)
-	}
-	helpers.AppLogger.Debugf("完成认证请求: %s %s", req.Method, url)
+	// 构建授权URL
+	// 注意：redirect_uri需要与百度开放平台配置的一致
+	oauthUrl := fmt.Sprintf("%s?action=refresh&state=%s", helpers.GlobalConfig.BaiduPanAuthServer, stateEncoded)
+	// 发送GET请求
+	resp, err := http.Get(oauthUrl)
 	if err != nil {
-		return response, nil, err
+		return nil, err
 	}
-	defer response.Body.Close() // ensure to close response body
-	resBytes, ioErr := io.ReadAll(response.Body)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var refreshResp RefreshResponse
+	err = json.Unmarshal(body, &refreshResp)
+	if err != nil {
+		return nil, err
+	}
+	// 设置新的访问凭证
+	return &refreshResp, nil
+}
+
+func UpdateToken(accountId uint, accessToken string) {
+	cachedClientsMutex.Lock()
+	defer cachedClientsMutex.Unlock()
+	clientKey := fmt.Sprintf("%d", accountId)
+	if client, exists := cachedClients[clientKey]; exists {
+		client.accessToken = accessToken
+	}
+}
+
+func (c *Client) SetAuthToken(accessToken string) {
+	c.accessToken = accessToken
+}
+
+// 统一处理错误
+func (c *Client) handleError(err error, resp *http.Response, respData any) error {
+	if err != nil {
+		return err
+	}
+	// 读取body并解码json
+	defer resp.Body.Close()
+	body, ioErr := io.ReadAll(resp.Body)
 	if ioErr != nil {
-		fmt.Println(ioErr)
-		return response, nil, ioErr
+		return ioErr
 	}
-	resp := &RespBaseBool[json.RawMessage]{}
-
-	bodyErr := json.Unmarshal(resBytes, resp)
-	if bodyErr != nil {
-		// 尝试用RespBase[json.RawMessage]解析
-		respBase := &RespBase[json.RawMessage]{}
-		bodyErr = json.Unmarshal(resBytes, respBase)
-		if bodyErr != nil {
-			helpers.AppLogger.Errorf("解析响应失败: %s", bodyErr.Error())
-			return response, resBytes, bodyErr
-		}
-		// 重新赋值状态码、错误码、错误信息、数据
-		resp.Code = respBase.Code
-		resp.Message = respBase.Message
-		resp.Data = respBase.Data
+	// 记录日志
+	helpers.BaiduPanLog.Infof("百度SDK请求响应: %s %s\n%s", resp.Request.Method, resp.Request.URL, string(body))
+	// 解码json
+	type ErrorResponse struct {
+		Errmsg string `json:"errmsg"`
+		Errno  int64  `json:"errno"`
 	}
-	helpers.AppLogger.Infof("认证访问 %s %s\nstate=%v, code=%d, msg=%s, data=%s\n", req.Method, req.URL, resp.State, resp.Code, resp.Message, string(resp.Data))
-	switch resp.Code {
-	case ACCESS_TOKEN_AUTH_FAIL:
-		helpers.AppLogger.Warn("访问凭证已过期1")
-		return response, nil, fmt.Errorf("token expired")
-	case ACCESS_AUTH_INVALID:
-		helpers.AppLogger.Warn("访问凭证已过期2")
-		return response, nil, fmt.Errorf("token expired")
-	case ACCESS_TOKEN_EXPIRY_CODE:
-		helpers.AppLogger.Warn("访问凭证已过期3")
-		return response, nil, fmt.Errorf("token expired")
-	case REFRESH_TOKEN_INVALID:
-		// 不需要重试，直接返回
-		helpers.AppLogger.Error("访问凭证无效，请重新登录")
-		return response, nil, fmt.Errorf("token expired")
-	case REQUEST_MAX_LIMIT_CODE:
-		c.throttleManager.MarkThrottled("API返回限流错误")
-		return response, nil, fmt.Errorf("访问频率过高")
+	var respBody ErrorResponse
+	err = json.Unmarshal(body, &respBody)
+	if err != nil {
+		return err
 	}
-	if respData != nil && resp.State {
-		// 解包
-		if unmarshalErr := json.Unmarshal(resp.Data, respData); unmarshalErr != nil {
-			respData = nil
-			helpers.AppLogger.Errorf("解包响应数据失败: %s", unmarshalErr.Error())
-			return response, resBytes, nil
-		}
-	}
-	if resp.Code != 0 {
-		return response, resBytes, fmt.Errorf("错误码：%d，错误信息：%s", resp.Code, resp.Message)
-	}
-	return response, resBytes, nil
-}
-
-// doAuthRequest 带重试的认证请求方法（使用全局队列）
-func (c *BaiDuPanClient) doAuthRequest(ctx context.Context, url string, req *resty.Request, options *RequestConfig, respData any) (*resty.Response, []byte, error) {
-	// 检查限速
-	if !options.BypassRateLimit {
-		isThrottled, reason := c.throttleManager.CheckRateLimit()
-		if isThrottled {
-			c.throttleManager.MarkThrottled(reason)
-			return nil, nil, fmt.Errorf("百度网盘API限速: %s", reason)
-		}
-	}
-
-	if c.AccessToken == "" {
-		// 没有token，直接报错
-		return nil, nil, fmt.Errorf("百度网盘账号授权失效，请在网盘账号管理中重新授权")
-	}
-	req.SetTimeout(options.Timeout)
-	// 设置默认头
-	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-	}
-	req.SetAuthToken(c.AccessToken).SetDoNotParseResponse(true)
-
-	var lastErr error
-	for attempt := 0; attempt <= options.MaxRetries; attempt++ {
-		// 使用全局队列执行器处理请求
-		executor := GetGlobalExecutor()
-		respChan := make(chan *RequestResponse, 1)
-
-		queuedReq := &QueuedRequest{
-			URL:             url,
-			Method:          req.Method,
-			Request:         req,
-			BypassRateLimit: options.BypassRateLimit,
-			ResponseChan:    respChan,
-			CreatedAt:       time.Now(),
-			Ctx:             ctx,
-		}
-
-		// 将请求加入队列
-		executor.EnqueueRequest(queuedReq)
-
-		// 等待响应
-		queueResp := <-respChan
-
-		if queueResp.Error == nil && queueResp.RespData != nil {
-			// 请求成功
-			if respData != nil && queueResp.RespData.State {
-				// 解包响应数据
-				if unmarshalErr := json.Unmarshal(queueResp.RespData.Data, respData); unmarshalErr != nil {
-					helpers.AppLogger.Errorf("解包响应数据失败: %s", unmarshalErr.Error())
-					return queueResp.Response, queueResp.RespBytes, nil
-				}
-			}
-			return queueResp.Response, queueResp.RespBytes, nil
-		}
-
-		lastErr = queueResp.Error
-
-		// Token相关错误处理
-		if queueResp.RespData != nil {
-			switch queueResp.RespData.Code {
-			case ACCESS_TOKEN_AUTH_FAIL, ACCESS_AUTH_INVALID, ACCESS_TOKEN_EXPIRY_CODE:
-				helpers.AppLogger.Errorf("访问凭证过期，等待自动刷新后下次重试")
-				lastErr = fmt.Errorf("访问凭证（Token）过期")
-			case REFRESH_TOKEN_INVALID:
-				lastErr = fmt.Errorf("访问凭证（Token）无效，请重新登录")
-				return queueResp.Response, queueResp.RespBytes, lastErr
+	// 检查errno是否为0
+	if respBody.Errno != 0 {
+		msg := respBody.Errmsg
+		if msg == "" {
+			var ok bool
+			msg, ok = ErrorMap[respBody.Errno]
+			if !ok {
+				msg = fmt.Sprintf("未知错误码 %d", respBody.Errno)
 			}
 		}
-
-		// 如果是限流错误，不重试
-		if queueResp.IsThrottled {
-			helpers.AppLogger.Warn("检测到限流，停止重试")
-			return queueResp.Response, queueResp.RespBytes, lastErr
-		}
-
-		// 其他错误开始重试
-		if attempt < options.MaxRetries && lastErr != nil {
-			helpers.AppLogger.Warnf("%s %s 请求失败:%+v", req.Method, url, lastErr)
-			helpers.AppLogger.Warnf("%s %s 请求失败，%+v秒后重试 (第%d次尝试)", req.Method, url, options.RetryDelay.Seconds(), attempt+1)
-			time.Sleep(options.RetryDelay)
-		}
+		return fmt.Errorf("百度SDK请求失败 错误: %s", msg)
 	}
-	return nil, nil, lastErr
-}
-
-// GetStats 获取客户端统计数据
-func (c *BaiDuPanClient) GetStats() *StatsSnapshot {
-	return c.stats.GetStats(24 * time.Hour)
-}
-
-// GetThrottleStatus 获取限流状态
-func (c *BaiDuPanClient) GetThrottleStatus() ThrottleStatus {
-	return c.throttleManager.GetThrottleStatus()
-}
-
-// SetGlobalExecutorConfig 设置全局执行器的速率限制配置
-func SetGlobalExecutorConfig(qps, qpm, qph, qpt int) {
-	executor := GetGlobalExecutor()
-	// 更新限速配置
-	rateLimit := &RateLimitConfig{
-		QPSLimit: int64(qps),
-		QPMLimit: int64(qpm),
-		QPHLimit: int64(qph),
-		QPTLimit: int64(qpt),
+	// 检查respData是否为空
+	if respData == nil {
+		return fmt.Errorf("百度SDK请求失败 错误: 响应数据为空")
 	}
-	// 更新ThrottleManager的限速配置
-	executor.throttleManager.UpdateRateLimit(rateLimit)
-	helpers.AppLogger.Infof("百度网盘限速配置已更新: QPS=%d, QPM=%d, QPH=%d, QPT=%d", qps, qpm, qph, qpt)
+	return nil
 }
 
-// GetStats 获取统计数据
-func (e *RequestQueueExecutor) GetStats(duration time.Duration) *StatsSnapshot {
-	return e.stats.GetStats(duration)
+func (c *Client) GetUserInfo(ctx context.Context) (*openapiclient.Uinforesponse, error) {
+	resp, r, err := c.client.UserinfoApi.Xpannasuinfo(ctx).AccessToken(c.accessToken).Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
-// GetThrottleStatus 获取限流状态
-func (e *RequestQueueExecutor) GetThrottleStatus() ThrottleStatus {
-	return e.throttleManager.GetThrottleStatus()
+func (c *Client) GetQuota(ctx context.Context) (*openapiclient.Quotaresponse, error) {
+	resp, r, err := c.client.UserinfoApi.Apiquota(ctx).AccessToken(c.accessToken).Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *Client) GetFileList(ctx context.Context, parentPath string, onlyDir int, showEmby int32, start int32, limit int32) ([]*FileInfo, error) {
+	startStr := fmt.Sprintf("%d", start)
+	onlyDirStr := fmt.Sprintf("%d", onlyDir)
+	if parentPath == "" {
+		parentPath = "/"
+	}
+	// 如果parentPath不以/开头，则加上/
+	if !strings.HasPrefix(parentPath, "/") {
+		parentPath = "/" + parentPath
+	}
+	resp, r, err := c.client.FileinfoApi.Xpanfilelist(ctx).AccessToken(c.accessToken).Dir(parentPath).Folder(onlyDirStr).Showempty(showEmby).Start(startStr).Limit(limit).Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		helpers.AppLogger.Warnf("获取百度网盘目录列表失败: 父目录：%s, 错误:%v", parentPath, err)
+		return nil, err
+	}
+	// 记录日志
+	// 解码resp
+	var fileList *FileListResponse
+	err = json.Unmarshal([]byte(resp), &fileList)
+	if err != nil {
+		return nil, err
+	}
+	return fileList.List, nil
+}
+
+// 调用递归接口获取所有文件，必须传入文件修改时间（上一次同步时间）
+func (c *Client) GetAllFiles(ctx context.Context, parentPath string, start int, limit int, mtime int64) (*FileListAllResponse, error) {
+	helpers.AppLogger.Infof("递归获取百度网盘文件列表：父目录：%s, 开始：%d, 限制：%d, 修改时间：%d", parentPath, start, limit, mtime)
+	if parentPath == "" {
+		parentPath = "/"
+	}
+	// 如果parentPath不以/开头，则加上/
+	if !strings.HasPrefix(parentPath, "/") {
+		parentPath = "/" + parentPath
+	}
+	req := c.client.MultimediafileApi.Xpanfilelistall(ctx).AccessToken(c.accessToken).Recursion(int32(1)).Path(parentPath).Start(int32(start)).Limit(int32(limit))
+	if mtime > 0 {
+		req = req.Mtime(fmt.Sprintf("%d", mtime))
+	}
+	resp, r, err := req.Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return nil, err
+	}
+	// 记录日志
+	// 解码resp
+	var fileList *FileListAllResponse
+	err = json.Unmarshal([]byte(resp), &fileList)
+	if err != nil {
+		return nil, err
+	}
+	return fileList, nil
+}
+
+// 查询文件详情，也能返回下载链接
+func (c *Client) GetFileDetail(ctx context.Context, fileId string, dlink int32) (*FileDetail, error) {
+	fsidsArr := []int64{}
+	fsidsArr = append(fsidsArr, helpers.StringToInt64(fileId))
+	// 转json
+	fsidsJson, err := json.Marshal(fsidsArr)
+	if err != nil {
+		return nil, err
+	}
+	fsids := string(fsidsJson)
+	helpers.AppLogger.Infof("查询百度网盘文件详情：文件ID：%s, 获取下载链接：%d", fsidsJson, dlink)
+	req := c.client.MultimediafileApi.Xpanmultimediafilemetas(ctx).AccessToken(c.accessToken).Fsids(fsids)
+	if dlink == 1 {
+		req = req.Dlink("1")
+	}
+	resp, r, err := req.Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return nil, err
+	}
+	// 解码resp
+	var fileDetail *FileDetailResponse
+	err = json.Unmarshal([]byte(resp), &fileDetail)
+	if err != nil {
+		return nil, err
+	}
+	return fileDetail.List[0], nil
+}
+
+func (c *Client) Mkdir(ctx context.Context, path string) error {
+	if path == "" {
+		return fmt.Errorf("路径不能为空")
+	}
+	// 如果path不以/开头，则加上/
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	resp, r, err := c.client.FileuploadApi.Xpanfilecreate(ctx).AccessToken(c.accessToken).Path(path).Isdir(1).Path(path).Rtype(0).Execute()
+	// 统一处理错误
+	return c.handleError(err, r, resp)
+}
+
+func (c *Client) Del(ctx context.Context, pathes []string) error {
+	// 将pathes做json
+	fileList, err := json.Marshal(pathes)
+	if err != nil {
+		return err
+	}
+	fileListStr := string(fileList)
+	r, err := c.client.FilemanagerApi.Filemanagerdelete(ctx).AccessToken(c.accessToken).Filelist(fileListStr).Execute()
+	// 统一处理错误
+	return c.handleError(err, r, nil)
+}
+
+func CalculateChunkSizeByFileSize(fileSize int64) int64 {
+	// <= 4G，4M分片
+	if fileSize <= 4*1024*1024*1024 {
+		return 4 * 1024 * 1024
+	}
+	// <=10G,16MB分片
+	if fileSize <= 10*1024*1024*1024 {
+		return 16 * 1024 * 1024
+	}
+	// <= 20G, 32MB分片
+	if fileSize <= 20*1024*1024*1024 {
+		return 32 * 1024 * 1024
+	}
+	return 0
+}
+
+// 预上传
+func (c *Client) PreCreate(ctx context.Context, localPath string, remotePath string) (*openapiclient.Fileprecreateresponse, *helpers.FileChunkMD5Result, error) {
+	stat, err := os.Stat(localPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("本地文件不存在")
+	}
+	size := stat.Size()
+	chunkSize := CalculateChunkSizeByFileSize(size)
+	if chunkSize <= 0 {
+		return nil, nil, fmt.Errorf("文件大小超出最大支持范围")
+	}
+	// 计算文件的分片
+	chunkMD5, err := helpers.CalculateFileChunkMD5(localPath, chunkSize)
+	if err != nil {
+		return nil, nil, fmt.Errorf("计算文件分片MD5失败")
+	}
+	// 对ChunkMD5.ChunkMD5s做json
+	chunkMD5sJson, err := json.Marshal(chunkMD5.ChunkMD5s)
+	if err != nil {
+		return nil, nil, fmt.Errorf("对ChunkMD5.ChunkMD5s做json失败")
+	}
+	chunkMD5s := string(chunkMD5sJson)
+	chunkMD5.ChunkMD5sJsonStr = chunkMD5s
+	req := c.client.FileuploadApi.Xpanfileprecreate(ctx).AccessToken(c.accessToken).Path(remotePath).Size(int32(size)).Isdir(0).Autoinit(1).Rtype(2).BlockList(chunkMD5s)
+	resp, r, err := req.Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return nil, nil, err
+	}
+	return &resp, chunkMD5, nil
+}
+
+// 上传文件
+func (c *Client) Upload(ctx context.Context, localPath string, remotePath string) error {
+	// 预上传
+	preResp, chunkMD5, err := c.PreCreate(ctx, localPath, remotePath)
+	if err != nil {
+		return fmt.Errorf("预上传失败：%w", err)
+	}
+	for _, seqNum := range *preResp.BlockList {
+		// 提取文件分片
+		tempFilePath, err := helpers.ExtractFileChunkToTemp(localPath, chunkMD5.ChunkSize, seqNum)
+		if err != nil {
+			return fmt.Errorf("提取文件分片 %d 失败: %w", seqNum, err)
+		}
+		file, err := os.Open(tempFilePath)
+		if err != nil {
+			os.Remove(tempFilePath)
+			return fmt.Errorf("打开临时文件失败: %w", err)
+		}
+		// 上传分片
+		uresp, ur, uerr := c.client.FileuploadApi.Pcssuperfile2(context.Background()).AccessToken(c.accessToken).Partseq(fmt.Sprintf("%d", seqNum)).Path(remotePath).Uploadid(*preResp.Uploadid).Type_("tmpfile").File(file).Execute()
+		if c.handleError(uerr, ur, uresp) != nil {
+			// 关闭且删除分片
+			file.Close()
+			os.Remove(tempFilePath)
+			return fmt.Errorf("上传文件分片 %d 失败: %w", seqNum, uerr)
+		}
+		// 关闭且删除分片
+		file.Close()
+		os.Remove(tempFilePath)
+	}
+	// 创建文件
+	resp, r, err := c.client.FileuploadApi.Xpanfilecreate(ctx).AccessToken(c.accessToken).Path(remotePath).Isdir(0).Size(int32(chunkMD5.FileSize)).Uploadid(*preResp.Uploadid).BlockList(chunkMD5.ChunkMD5sJsonStr).Rtype(2).Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return fmt.Errorf("创建文件失败：%w", err)
+	}
+	return nil
 }

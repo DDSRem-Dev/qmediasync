@@ -1,6 +1,7 @@
 package syncstrm
 
 import (
+	"Q115-STRM/internal/baidupan"
 	"Q115-STRM/internal/db"
 	"Q115-STRM/internal/helpers"
 	"Q115-STRM/internal/models"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -25,6 +27,7 @@ type driverImpl interface {
 	GetTotalFileCount(ctx context.Context) (int64, string, error)
 	GetDirsByPathId(ctx context.Context, pathId string) ([]pathQueueItem, error)
 	GetFilesByPathId(ctx context.Context, rootPathId string, offset, limit int) ([]v115open.File, error)
+	GetFilesByPathMtime(ctx context.Context, rootPathId string, offset, limit int, mtime int64) (*baidupan.FileListAllResponse, error)
 	// 所有文件详情，含路径
 	DetailByFileId(ctx context.Context, fileId string) (*v115open.FileDetail, error)
 	// 删除目录下的某些文件
@@ -37,6 +40,7 @@ type SyncStrm struct {
 	Sync         *models.Sync    // 同步记录，Start方法会生成
 	SourcePath   string          // 来源路径
 	SourcePathId string
+	LastSyncAt   int64 // 最后同步时间
 	TmpSyncPath  bool
 	TargetPath   string
 	Config       SyncStrmConfig
@@ -74,7 +78,7 @@ type pathQueueItem struct {
 	Mtime  int64  // 最后修改时间
 }
 
-func NewSyncStrm(account *models.Account, syncPathId uint, sourcePath, sourcePathId, targetPath string, config SyncStrmConfig, IsFullSync bool) *SyncStrm {
+func NewSyncStrm(account *models.Account, syncPathId uint, sourcePath, sourcePathId, targetPath string, config SyncStrmConfig, IsFullSync bool, lastSyncAt int64) *SyncStrm {
 	var syncDriver driverImpl
 	switch account.SourceType {
 	case models.SourceType115:
@@ -83,6 +87,8 @@ func NewSyncStrm(account *models.Account, syncPathId uint, sourcePath, sourcePat
 		syncDriver = NewOpenListDriver(account.GetOpenListClient())
 	case models.SourceTypeLocal:
 		syncDriver = NewLocalDriver()
+	case models.SourceTypeBaiduPan:
+		syncDriver = NewBaiduPanDriver(account.GetBaiDuPanClient())
 	}
 	pathWorkerMax := int64(models.SettingsGlobal.FileDetailThreads)
 	switch account.SourceType {
@@ -92,9 +98,18 @@ func NewSyncStrm(account *models.Account, syncPathId uint, sourcePath, sourcePat
 		pathWorkerMax = int64(models.SettingsGlobal.OpenlistQPS)
 	case models.SourceType115:
 		pathWorkerMax = int64(models.SettingsGlobal.FileDetailThreads)
+	case models.SourceTypeBaiduPan:
+		pathWorkerMax = int64(models.SettingsGlobal.FileDetailThreads)
 	}
 	if pathWorkerMax <= 1 {
 		pathWorkerMax = 2 // 最小为2，否则并发操作会出错
+	}
+	// 非windows的本地路径，需要以/开头
+	if runtime.GOOS != "windows" && account.SourceType == models.SourceTypeLocal {
+		// 如果sourcePath不以/开头，添加一个/
+		if !strings.HasPrefix(sourcePath, "/") {
+			sourcePath = "/" + sourcePath
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -112,6 +127,7 @@ func NewSyncStrm(account *models.Account, syncPathId uint, sourcePath, sourcePat
 		SyncPathId:    syncPathId,
 		FullSync:      IsFullSync,
 		PathErrChan:   make(chan error, 1),
+		LastSyncAt:    lastSyncAt,
 	}
 	s.memSyncCache = NewMemorySyncCache(syncPathId)
 	if s.Account == nil {
@@ -154,7 +170,7 @@ func NewSyncStrmFromSyncPath(syncPath *models.SyncPath) *SyncStrm {
 		DelEmptyLocalDir:      syncPath.GetDeleteDir() == 1,
 		CheckMetaMtime:        syncPath.GetCheckMetaMtime(),
 	}
-	return NewSyncStrm(account, syncPath.ID, syncPath.RemotePath, syncPath.BaseCid, syncPath.LocalPath, config, syncPath.IsFullSync)
+	return NewSyncStrm(account, syncPath.ID, syncPath.RemotePath, syncPath.BaseCid, syncPath.LocalPath, config, syncPath.IsFullSync, syncPath.LastSyncAt)
 }
 
 // 直接同步某个路径（可以是目录，也可以是文件）
@@ -169,7 +185,7 @@ func NewSyncStrmByPath(account *models.Account, sourcePath, sourcePathId string)
 		StrmUrlNeedPath:       models.SettingsGlobal.AddPath,
 		DelEmptyLocalDir:      models.SettingsGlobal.DeleteDir == 1,
 	}
-	return NewSyncStrm(account, 0, sourcePath, sourcePathId, "", config, false)
+	return NewSyncStrm(account, 0, sourcePath, sourcePathId, "", config, false, 0)
 }
 
 func (s *SyncStrm) Stop() {
@@ -222,12 +238,14 @@ func (s *SyncStrm) Start() error {
 			return errors.New(reason)
 		}
 	}
-	if s.Account.SourceType != models.SourceType115 {
+	switch s.Account.SourceType {
+	case models.SourceType115:
+		s.Start115Sync()
+	case models.SourceTypeBaiduPan:
+		s.StartBaiduPanSync()
+	default:
 		// 其他来源走一套逻辑
 		s.StartOther()
-	} else {
-		// 115 单独处理
-		s.Start115Sync()
 	}
 	s.Sync.Logger.Info("完成所有路径和文件的处理，检查是否有错误发生")
 	select {
@@ -238,6 +256,13 @@ func (s *SyncStrm) Start() error {
 		s.Sync.Failed(fmt.Sprintf("路径队列处理失败: %v", err))
 		return err
 	default:
+	}
+	// 处理完所有路径和文件后，更新最后同步时间
+	if s.SyncPathId > 0 {
+		syncPath := models.GetSyncPathById(s.SyncPathId)
+		if syncPath != nil {
+			syncPath.UpdateLastSync()
+		}
 	}
 	// 开始添加需要下载的文件到下载队列
 	s.Sync.Logger.Info("开始将要下载的任务添加到下载队列")
@@ -250,7 +275,8 @@ func (s *SyncStrm) Start() error {
 	s.Sync.NewStrm = int(s.NewStrm)
 	s.Sync.NewUpload = int(s.NewUpload)
 	s.Sync.Total = int(s.TotalFile)
-	s.Sync.Complete()
+	s.Sync.Complete(s.Account.SourceType)
+	// 如果有syncpathid，则更新最后同步时间
 
 	if !s.TmpSyncPath {
 		// 有syncPathId,将IsFullSync改为false
