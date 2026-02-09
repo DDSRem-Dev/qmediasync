@@ -751,7 +751,7 @@ func (sm *ScrapeMediaFile) ReScrape(name string, year int, tmdbId int64, season 
 				helpers.AppLogger.Errorf("重新刮削时更新电视剧内所有剧集失败: %v", err)
 				return err
 			}
-			if err := db.Db.Where("id = ?", sm.ID).Updates(updateData).Error; err != nil {
+			if err := db.Db.Model(ScrapeMediaFile{}).Where("id = ?", sm.ID).Updates(updateData).Error; err != nil {
 				helpers.AppLogger.Errorf("重新刮削时更新剧集失败: %v", err)
 				return err
 			}
