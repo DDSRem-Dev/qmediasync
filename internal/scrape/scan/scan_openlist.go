@@ -209,6 +209,8 @@ func (s *ScanOpenlistImpl) startPathWorkWithLimiter(workerID int) {
 			}
 			// 任务完成，通知WaitGroup
 			s.wg.Done()
+		default:
+			time.Sleep(1 * time.Second)
 		}
 
 	}

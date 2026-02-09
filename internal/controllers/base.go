@@ -116,10 +116,12 @@ func ValidateJWT(tokenString string) (*LoginUser, error) {
 func Proxy115(c *gin.Context) {
 	// 获取原始url参数
 	target := c.Request.URL.Query().Get("url")
+	baidupan := c.Request.URL.Query().Get("baidupan")
 	if target == "" {
 		c.JSON(http.StatusBadRequest, APIResponse[any]{Code: BadRequest, Message: "缺少url参数", Data: nil})
 		return
 	}
+	helpers.AppLogger.Infof("反代网盘下载链接: %s", target)
 	// // 只允许反代 cdnfhnfile.115cdn.net 域名
 	// if !strings.HasPrefix(target, "https://cdnfhnfile.115cdn.net/") {
 	// 	c.JSON(http.StatusForbidden, APIResponse[any]{Code: BadRequest, Message: "只允许反代115CDN链接", Data: nil})
@@ -138,7 +140,11 @@ func Proxy115(c *gin.Context) {
 			req.Header[k] = v
 		}
 	}
-	req.Header.Set("User-Agent", v115open.DEFAULTUA)
+	if baidupan != "" {
+		req.Header.Set("User-Agent", "pan.baidu.com")
+	} else {
+		req.Header.Set("User-Agent", v115open.DEFAULTUA)
+	}
 	// 发起请求
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)

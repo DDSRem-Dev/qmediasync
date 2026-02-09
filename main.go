@@ -79,12 +79,6 @@ func (app *App) Start() {
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
 		log.Println("收到停止信号")
-		// if runtime.GOOS == "windows" {
-		// 	// 只关闭终端窗口，真正退出需要通知栏图标退出
-		// 	// 等待程序真正退出
-		// 	<-helpers.WindowsExitChan
-		// 	log.Println("应用程序正常退出")
-		// } else {
 		// 停止应用
 		app.Stop()
 		log.Println("应用程序正常退出")
@@ -380,6 +374,7 @@ func initLogger() {
 	helpers.V115Log = helpers.NewLogger(helpers.GlobalConfig.Log.V115, false, true)
 	helpers.OpenListLog = helpers.NewLogger(helpers.GlobalConfig.Log.OpenList, false, true)
 	helpers.TMDBLog = helpers.NewLogger(helpers.GlobalConfig.Log.TMDB, false, true)
+	helpers.BaiduPanLog = helpers.NewLogger(helpers.GlobalConfig.Log.BaiduPan, false, true)
 }
 
 func initOthers() {
@@ -398,8 +393,8 @@ func initOthers() {
 	models.GetEmbyConfig()           // 加载Emby配置
 	helpers.SubscribeSync(helpers.V115TokenInValidEvent, models.HandleV115TokenInvalid)
 	helpers.SubscribeSync(helpers.SaveOpenListTokenEvent, models.HandleOpenListTokenSaveSync)
-	models.FailAllRunningSyncTasks() // 将所有运行中的同步任务设置为失败状态
-	synccron.Refresh115AccessToken() // 启动时刷新一次115的访问凭证，防止有过期的token导致同步失败
+	models.FailAllRunningSyncTasks()   // 将所有运行中的同步任务设置为失败状态
+	synccron.RefreshOAuthAccessToken() // 启动时刷新一次115的访问凭证，防止有过期的token导致同步失败
 
 	// 设置115请求队列的统计保存回调函数
 	v115open.SetGlobalExecutorStatSaver(func(requestTime int64, url, method string, duration int64, isThrottled bool) {
@@ -444,11 +439,14 @@ func setRouter(r *gin.Engine) {
 	r.GET("/path/list", controllers.GetPathList) // 路径列表接口
 	r.POST("/emby/webhook", controllers.Webhook)
 	r.POST("/api/login", controllers.LoginAction)
-	r.GET("/115/url/*filename", controllers.Get115UrlByPickCode) // 查询115直链 by pickcode 支持iso，路径最后一部分是.扩展名格式
-	r.GET("/115/newurl", controllers.Get115UrlByPickCode)        // 查询115直链 by pickcode
-	r.GET("/openlist/url", controllers.GetOpenListFileUrl)       // 查询OpenList直链
+	r.GET("/115/url/*filename", controllers.Get115UrlByPickCode)           // 查询115直链 by pickcode 支持iso，路径最后一部分是.扩展名格式
+	r.GET("/115/newurl", controllers.Get115UrlByPickCode)                  // 查询115直链 by pickcode
+	r.GET("/baidupan/url/*filename", controllers.GetBaiduPanUrlByPickCode) // 查询百度网盘直链 by fsid 支持iso，路径最后一部分是.扩展名格式
 
-	r.GET("/proxy-115", controllers.Proxy115)                            // 115CDN反代路由
+	r.GET("/openlist/url", controllers.GetOpenListFileUrl) // 查询OpenList直链
+
+	r.GET("/proxy-115", controllers.Proxy115) // 115CDN反代路由
+
 	r.GET("/api/scrape/tmp-image", controllers.ScrapeTmpImage)           // 获取临时图片
 	r.GET("/api/scrape/records/export", controllers.ExportScrapeRecords) // 导出刮削记录
 	r.GET("/api/logs/ws", controllers.LogWebSocket)                      // WebSocket日志查看
@@ -473,10 +471,15 @@ func setRouter(r *gin.Engine) {
 		api.GET("/115/stats/daily", controllers.GetRequestStatsByDay)    // 获取115请求统计（按天）
 		api.GET("/115/stats/hourly", controllers.GetRequestStatsByHour)  // 获取115请求统计（按小时）
 		api.POST("/115/stats/clean", controllers.CleanOldRequestStats)   // 清理旧的请求统计数据
-		api.GET("/update/last", controllers.GetLastRelease)              // 获取最新版本
-		api.POST("/update/to-version", controllers.UpdateToVersion)      // 获取更新版本
-		api.GET("/update/progress", controllers.UpdateProgress)          // 获取更新进度
-		api.POST("/update/cancel", controllers.CancelUpdate)             // 取消更新
+		// 百度网盘相关路由
+		api.GET("/baidupan/oauth-url", controllers.GetBaiDuPanOAuthUrl)           // 获取百度网盘OAuth登录地址
+		api.POST("/baidupan/oauth-confirm", controllers.ConfirmBaiDuPanOAuthCode) // 确认百度网盘OAuth登录
+		api.GET("/baidupan/status", controllers.GetBaiDuPanStatus)                // 查询百度网盘状态
+
+		api.GET("/update/last", controllers.GetLastRelease)         // 获取最新版本
+		api.POST("/update/to-version", controllers.UpdateToVersion) // 获取更新版本
+		api.GET("/update/progress", controllers.UpdateProgress)     // 获取更新进度
+		api.POST("/update/cancel", controllers.CancelUpdate)        // 取消更新
 		api.GET("/user/info", controllers.GetUserInfo)
 		api.GET("/path/list", controllers.GetPathList)
 		api.GET("/path/files", controllers.GetNetFileList) // 查询网盘文件列表

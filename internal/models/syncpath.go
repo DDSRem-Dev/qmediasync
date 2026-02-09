@@ -19,22 +19,43 @@ const (
 	SourceTypeLocal     SourceType = "local"
 	SourceType123       SourceType = "123"
 	SourceTypeOpenList  SourceType = "openlist"
+	SourceTypeBaiduPan  SourceType = "baidupan"
 	SourceTypeEmbyMedia SourceType = "emby媒体信息提取" // emby媒体信息提取专用
 )
 
+func (s SourceType) String() string {
+	switch s {
+	case SourceType115:
+		return "115"
+	case SourceTypeLocal:
+		return "本地"
+	case SourceType123:
+		return "123"
+	case SourceTypeOpenList:
+		return "开放列表"
+	case SourceTypeBaiduPan:
+		return "百度网盘"
+	case SourceTypeEmbyMedia:
+		return "Emby媒体信息提取"
+	default:
+		return string(s)
+	}
+}
+
 type SyncPathSetting struct {
-	MinVideoSize   int64    `json:"min_video_size"`                     // 最小视频大小，单位字节,-1表示使用STRM设置
-	VideoExt       string   `json:"-"`                                  // 视频文件扩展名，JSON格式
-	VideoExtArr    []string `json:"video_ext_arr" gorm:"-"`             // 视频文件扩展名数组，不参与数据库操作，仅供前端使用
-	MetaExt        string   `json:"-"`                                  // 元数据文件扩展名，JSON格式
-	MetaExtArr     []string `json:"meta_ext_arr" gorm:"-"`              // 元数据文件扩展名数组，不参与数据库操作，仅供前端使用
-	ExcludeName    string   `json:"-"`                                  // 排除的文件名，JSON格式
-	ExcludeNameArr []string `json:"exclude_name_arr" gorm:"-"`          // 排除的文件名数组，不参与数据库操作，仅供前端使用
-	UploadMeta     int      `json:"upload_meta" gorm:"default:-1"`      // 是否上传元数据，-1表示使用STRM设置，0表示保留，1表示上传，2-表示删除
-	DownloadMeta   int      `json:"download_meta" gorm:"default:-1"`    // 是否下载元数据，-1表示使用STRM设置，0表示不下载，1表示下载
-	DeleteDir      int      `json:"delete_dir" gorm:"default:-1"`       // 是否删除目录，-1表示使用STRM设置，0表示不删除，1表示删除
-	AddPath        int      `json:"add_path" gorm:"default:-1"`         // 是否添加路径，默认-1(使用settings的值), 1- 表示添加路径， 2-表示不添加路径
-	CheckMetaMtime int      `json:"check_meta_mtime" gorm:"default:-1"` // 是否检查元数据文件修改时间，默认-1(使用settings的值), 0表示不检查，1表示检查
+	MinVideoSize    int64    `json:"min_video_size"`                     // 最小视频大小，单位字节,-1表示使用STRM设置
+	VideoExt        string   `json:"-"`                                  // 视频文件扩展名，JSON格式
+	VideoExtArr     []string `json:"video_ext_arr" gorm:"-"`             // 视频文件扩展名数组，不参与数据库操作，仅供前端使用
+	MetaExt         string   `json:"-"`                                  // 元数据文件扩展名，JSON格式
+	MetaExtArr      []string `json:"meta_ext_arr" gorm:"-"`              // 元数据文件扩展名数组，不参与数据库操作，仅供前端使用
+	ExcludeName     string   `json:"-"`                                  // 排除的文件名，JSON格式
+	ExcludeNameArr  []string `json:"exclude_name_arr" gorm:"-"`          // 排除的文件名数组，不参与数据库操作，仅供前端使用
+	UploadMeta      int      `json:"upload_meta" gorm:"default:-1"`      // 是否上传元数据，-1表示使用STRM设置，0表示保留，1表示上传，2-表示删除
+	DownloadMeta    int      `json:"download_meta" gorm:"default:-1"`    // 是否下载元数据，-1表示使用STRM设置，0表示不下载，1表示下载
+	DeleteDir       int      `json:"delete_dir" gorm:"default:-1"`       // 是否删除目录，-1表示使用STRM设置，0表示不删除，1表示删除
+	AddPath         int      `json:"add_path" gorm:"default:-1"`         // 是否添加路径，默认-1(使用settings的值), 1- 表示添加路径， 2-表示不添加路径
+	CheckMetaMtime  int      `json:"check_meta_mtime" gorm:"default:-1"` // 是否检查元数据文件修改时间，默认-1(使用settings的值), 0表示不检查，1表示检查
+	BaiduSyncMethod int      `json:"baidu_sync_method" gorm:"default:1"` // 百度网盘同步方法，默认: 1, 1表示递归法，2表示直接查询递归文件接口（每分钟8次请求）
 }
 
 type SyncPath struct {

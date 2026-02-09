@@ -1,0 +1,358 @@
+package baidupan
+
+import (
+	"Q115-STRM/internal/helpers"
+	openapiclient "Q115-STRM/openxpanapi"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"time"
+)
+
+type Client struct {
+	client      *openapiclient.APIClient
+	accessToken string
+}
+
+// 解析响应
+type RefreshResponse struct {
+	AccessToken  string `json:"access_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// 全局HTTP客户端实例
+var cachedClients map[string]*Client = make(map[string]*Client, 0)
+var cachedClientsMutex sync.RWMutex
+
+func NewBaiDuPanClient(accountId uint, accessToken string) *Client {
+	cachedClientsMutex.RLock()
+	defer cachedClientsMutex.RUnlock()
+	clientKey := fmt.Sprintf("%d", accountId)
+	if client, exists := cachedClients[clientKey]; exists {
+		client.accessToken = accessToken
+		return client
+	}
+	config := openapiclient.NewConfiguration()
+	// if !helpers.IsRelease {
+	// 	config.Debug = true
+	// }
+	apiClient := openapiclient.NewAPIClient(config)
+	client := &Client{
+		client:      apiClient,
+		accessToken: accessToken,
+	}
+	cachedClients[clientKey] = client
+	return client
+}
+
+func RefreshToken(accountId uint, refreshToken string) (*RefreshResponse, error) {
+	// 生成state参数
+	type stateData struct {
+		Time         int64  `json:"time"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	stateObj := stateData{
+		Time:         time.Now().Unix(),
+		RefreshToken: refreshToken,
+	}
+	stateJson, _ := json.Marshal(stateObj)
+	stateEncoded, err := helpers.Encrypt(string(stateJson))
+	if err != nil {
+		return nil, err
+	}
+	// 构建授权URL
+	// 注意：redirect_uri需要与百度开放平台配置的一致
+	oauthUrl := fmt.Sprintf("%s?action=refresh&state=%s", helpers.GlobalConfig.BaiduPanAuthServer, stateEncoded)
+	// 发送GET请求
+	resp, err := http.Get(oauthUrl)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var refreshResp RefreshResponse
+	err = json.Unmarshal(body, &refreshResp)
+	if err != nil {
+		return nil, err
+	}
+	// 设置新的访问凭证
+	return &refreshResp, nil
+}
+
+func UpdateToken(accountId uint, accessToken string) {
+	cachedClientsMutex.Lock()
+	defer cachedClientsMutex.Unlock()
+	clientKey := fmt.Sprintf("%d", accountId)
+	if client, exists := cachedClients[clientKey]; exists {
+		client.accessToken = accessToken
+	}
+}
+
+func (c *Client) SetAuthToken(accessToken string) {
+	c.accessToken = accessToken
+}
+
+// 统一处理错误
+func (c *Client) handleError(err error, resp *http.Response, respData any) error {
+	if err != nil {
+		return err
+	}
+	// 读取body并解码json
+	defer resp.Body.Close()
+	body, ioErr := io.ReadAll(resp.Body)
+	if ioErr != nil {
+		return ioErr
+	}
+	// 记录日志
+	helpers.BaiduPanLog.Infof("百度SDK请求响应: %s %s\n%s", resp.Request.Method, resp.Request.URL, string(body))
+	// 解码json
+	type ErrorResponse struct {
+		Errmsg string `json:"errmsg"`
+		Errno  int64  `json:"errno"`
+	}
+	var respBody ErrorResponse
+	err = json.Unmarshal(body, &respBody)
+	if err != nil {
+		return err
+	}
+	// 检查errno是否为0
+	if respBody.Errno != 0 {
+		msg := respBody.Errmsg
+		if msg == "" {
+			var ok bool
+			msg, ok = ErrorMap[respBody.Errno]
+			if !ok {
+				msg = fmt.Sprintf("未知错误码 %d", respBody.Errno)
+			}
+		}
+		return fmt.Errorf("百度SDK请求失败 错误: %s", msg)
+	}
+	// 检查respData是否为空
+	if respData == nil {
+		return fmt.Errorf("百度SDK请求失败 错误: 响应数据为空")
+	}
+	return nil
+}
+
+func (c *Client) GetUserInfo(ctx context.Context) (*openapiclient.Uinforesponse, error) {
+	resp, r, err := c.client.UserinfoApi.Xpannasuinfo(ctx).AccessToken(c.accessToken).Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *Client) GetQuota(ctx context.Context) (*openapiclient.Quotaresponse, error) {
+	resp, r, err := c.client.UserinfoApi.Apiquota(ctx).AccessToken(c.accessToken).Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *Client) GetFileList(ctx context.Context, parentPath string, onlyDir int, showEmby int32, start int32, limit int32) ([]*FileInfo, error) {
+	startStr := fmt.Sprintf("%d", start)
+	onlyDirStr := fmt.Sprintf("%d", onlyDir)
+	if parentPath == "" {
+		parentPath = "/"
+	}
+	// 如果parentPath不以/开头，则加上/
+	if !strings.HasPrefix(parentPath, "/") {
+		parentPath = "/" + parentPath
+	}
+	resp, r, err := c.client.FileinfoApi.Xpanfilelist(ctx).AccessToken(c.accessToken).Dir(parentPath).Folder(onlyDirStr).Showempty(showEmby).Start(startStr).Limit(limit).Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		helpers.AppLogger.Warnf("获取百度网盘目录列表失败: 父目录：%s, 错误:%v", parentPath, err)
+		return nil, err
+	}
+	// 记录日志
+	// 解码resp
+	var fileList *FileListResponse
+	err = json.Unmarshal([]byte(resp), &fileList)
+	if err != nil {
+		return nil, err
+	}
+	return fileList.List, nil
+}
+
+// 调用递归接口获取所有文件，必须传入文件修改时间（上一次同步时间）
+func (c *Client) GetAllFiles(ctx context.Context, parentPath string, start int, limit int, mtime int64) (*FileListAllResponse, error) {
+	helpers.AppLogger.Infof("递归获取百度网盘文件列表：父目录：%s, 开始：%d, 限制：%d, 修改时间：%d", parentPath, start, limit, mtime)
+	if parentPath == "" {
+		parentPath = "/"
+	}
+	// 如果parentPath不以/开头，则加上/
+	if !strings.HasPrefix(parentPath, "/") {
+		parentPath = "/" + parentPath
+	}
+	req := c.client.MultimediafileApi.Xpanfilelistall(ctx).AccessToken(c.accessToken).Recursion(int32(1)).Path(parentPath).Start(int32(start)).Limit(int32(limit))
+	if mtime > 0 {
+		req = req.Mtime(fmt.Sprintf("%d", mtime))
+	}
+	resp, r, err := req.Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return nil, err
+	}
+	// 记录日志
+	// 解码resp
+	var fileList *FileListAllResponse
+	err = json.Unmarshal([]byte(resp), &fileList)
+	if err != nil {
+		return nil, err
+	}
+	return fileList, nil
+}
+
+// 查询文件详情，也能返回下载链接
+func (c *Client) GetFileDetail(ctx context.Context, fileId string, dlink int32) (*FileDetail, error) {
+	fsidsArr := []int64{}
+	fsidsArr = append(fsidsArr, helpers.StringToInt64(fileId))
+	// 转json
+	fsidsJson, err := json.Marshal(fsidsArr)
+	if err != nil {
+		return nil, err
+	}
+	fsids := string(fsidsJson)
+	helpers.AppLogger.Infof("查询百度网盘文件详情：文件ID：%s, 获取下载链接：%d", fsidsJson, dlink)
+	req := c.client.MultimediafileApi.Xpanmultimediafilemetas(ctx).AccessToken(c.accessToken).Fsids(fsids)
+	if dlink == 1 {
+		req = req.Dlink("1")
+	}
+	resp, r, err := req.Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return nil, err
+	}
+	// 解码resp
+	var fileDetail *FileDetailResponse
+	err = json.Unmarshal([]byte(resp), &fileDetail)
+	if err != nil {
+		return nil, err
+	}
+	return fileDetail.List[0], nil
+}
+
+func (c *Client) Mkdir(ctx context.Context, path string) error {
+	if path == "" {
+		return fmt.Errorf("路径不能为空")
+	}
+	// 如果path不以/开头，则加上/
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	resp, r, err := c.client.FileuploadApi.Xpanfilecreate(ctx).AccessToken(c.accessToken).Path(path).Isdir(1).Path(path).Rtype(0).Execute()
+	// 统一处理错误
+	return c.handleError(err, r, resp)
+}
+
+func (c *Client) Del(ctx context.Context, pathes []string) error {
+	// 将pathes做json
+	fileList, err := json.Marshal(pathes)
+	if err != nil {
+		return err
+	}
+	fileListStr := string(fileList)
+	r, err := c.client.FilemanagerApi.Filemanagerdelete(ctx).AccessToken(c.accessToken).Filelist(fileListStr).Execute()
+	// 统一处理错误
+	return c.handleError(err, r, nil)
+}
+
+func CalculateChunkSizeByFileSize(fileSize int64) int64 {
+	// <= 4G，4M分片
+	if fileSize <= 4*1024*1024*1024 {
+		return 4 * 1024 * 1024
+	}
+	// <=10G,16MB分片
+	if fileSize <= 10*1024*1024*1024 {
+		return 16 * 1024 * 1024
+	}
+	// <= 20G, 32MB分片
+	if fileSize <= 20*1024*1024*1024 {
+		return 32 * 1024 * 1024
+	}
+	return 0
+}
+
+// 预上传
+func (c *Client) PreCreate(ctx context.Context, localPath string, remotePath string) (*openapiclient.Fileprecreateresponse, *helpers.FileChunkMD5Result, error) {
+	stat, err := os.Stat(localPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("本地文件不存在")
+	}
+	size := stat.Size()
+	chunkSize := CalculateChunkSizeByFileSize(size)
+	if chunkSize <= 0 {
+		return nil, nil, fmt.Errorf("文件大小超出最大支持范围")
+	}
+	// 计算文件的分片
+	chunkMD5, err := helpers.CalculateFileChunkMD5(localPath, chunkSize)
+	if err != nil {
+		return nil, nil, fmt.Errorf("计算文件分片MD5失败")
+	}
+	// 对ChunkMD5.ChunkMD5s做json
+	chunkMD5sJson, err := json.Marshal(chunkMD5.ChunkMD5s)
+	if err != nil {
+		return nil, nil, fmt.Errorf("对ChunkMD5.ChunkMD5s做json失败")
+	}
+	chunkMD5s := string(chunkMD5sJson)
+	chunkMD5.ChunkMD5sJsonStr = chunkMD5s
+	req := c.client.FileuploadApi.Xpanfileprecreate(ctx).AccessToken(c.accessToken).Path(remotePath).Size(int32(size)).Isdir(0).Autoinit(1).Rtype(2).BlockList(chunkMD5s)
+	resp, r, err := req.Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return nil, nil, err
+	}
+	return &resp, chunkMD5, nil
+}
+
+// 上传文件
+func (c *Client) Upload(ctx context.Context, localPath string, remotePath string) error {
+	// 预上传
+	preResp, chunkMD5, err := c.PreCreate(ctx, localPath, remotePath)
+	if err != nil {
+		return fmt.Errorf("预上传失败：%w", err)
+	}
+	for _, seqNum := range *preResp.BlockList {
+		// 提取文件分片
+		tempFilePath, err := helpers.ExtractFileChunkToTemp(localPath, chunkMD5.ChunkSize, seqNum)
+		if err != nil {
+			return fmt.Errorf("提取文件分片 %d 失败: %w", seqNum, err)
+		}
+		file, err := os.Open(tempFilePath)
+		if err != nil {
+			os.Remove(tempFilePath)
+			return fmt.Errorf("打开临时文件失败: %w", err)
+		}
+		// 上传分片
+		uresp, ur, uerr := c.client.FileuploadApi.Pcssuperfile2(context.Background()).AccessToken(c.accessToken).Partseq(fmt.Sprintf("%d", seqNum)).Path(remotePath).Uploadid(*preResp.Uploadid).Type_("tmpfile").File(file).Execute()
+		if c.handleError(uerr, ur, uresp) != nil {
+			// 关闭且删除分片
+			file.Close()
+			os.Remove(tempFilePath)
+			return fmt.Errorf("上传文件分片 %d 失败: %w", seqNum, uerr)
+		}
+		// 关闭且删除分片
+		file.Close()
+		os.Remove(tempFilePath)
+	}
+	// 创建文件
+	resp, r, err := c.client.FileuploadApi.Xpanfilecreate(ctx).AccessToken(c.accessToken).Path(remotePath).Isdir(0).Size(int32(chunkMD5.FileSize)).Uploadid(*preResp.Uploadid).BlockList(chunkMD5.ChunkMD5sJsonStr).Rtype(2).Execute()
+	// 统一处理错误
+	if c.handleError(err, r, resp) != nil {
+		return fmt.Errorf("创建文件失败：%w", err)
+	}
+	return nil
+}

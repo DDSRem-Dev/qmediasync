@@ -60,6 +60,8 @@ func GetPathList(c *gin.Context) {
 		pathes, err = GetOpenListPath(req.ParentId, req.AccountId)
 	case models.SourceType115:
 		pathes, err = Get115PathList(req.ParentId, req.AccountId)
+	case models.SourceTypeBaiduPan:
+		pathes, err = GetBaiduPanPathList(req.ParentId, req.AccountId)
 	default:
 		// 报错
 		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "未知的同步源类型", Data: nil})
@@ -251,6 +253,46 @@ func Get115PathList(parentId string, accountId uint) ([]DirResp, error) {
 	return folders, nil
 }
 
+func GetBaiduPanPathList(parentId string, accountId uint) ([]DirResp, error) {
+	// 获取115目录列表
+	account, err := models.GetAccountById(accountId)
+	if err != nil {
+		return nil, err
+	}
+	client := account.GetBaiDuPanClient()
+	ctx := context.Background()
+	fileList, fileErr := client.GetFileList(ctx, parentId, 1, 0, 0, 100)
+	if fileErr != nil {
+		helpers.AppLogger.Warnf("获取百度网盘目录列表失败: 父目录：%s, 错误:%v", parentId, fileErr)
+		return nil, fileErr
+	}
+	// helpers.AppLogger.Infof("成功获取百度网盘文件列表, 父目录ID: %s, 文件数量: %d", parentId, len(resp.Data))
+	items := make([]DirResp, 0)
+	if parentId != "" || parentId != "/" {
+		// 需要加入回到上一级
+		parentParent := filepath.ToSlash(filepath.Dir(parentId))
+		if parentParent == "" || parentParent == "\\" {
+			parentParent = "/"
+		}
+		items = append(items, DirResp{
+			Id:   parentParent,
+			Name: "..",
+			Path: parentParent,
+		})
+	}
+	// 构建Path
+	for _, item := range fileList {
+		// 去掉item.Path开头的/
+		item.Path = strings.TrimPrefix(item.Path, "/")
+		items = append(items, DirResp{
+			Id:   item.Path,
+			Name: filepath.Base(item.Path),
+			Path: item.Path,
+		})
+	}
+	return items, nil
+}
+
 type FileItem struct {
 	Id          string `json:"id"`
 	IsDirectory bool   `json:"is_directory"`
@@ -289,6 +331,8 @@ func GetNetFileList(c *gin.Context) {
 		list, err = GetOpenListFiles(req.ParentId, account, req.Page, req.PageSize)
 	case models.SourceType115:
 		list, err = Get115Files(req.ParentId, account, req.Page, req.PageSize)
+	case models.SourceTypeBaiduPan:
+		list, err = GetBaiduPanFiles(req.ParentId, account, req.Page, req.PageSize)
 	default:
 		// 报错
 		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "未知的网盘类型", Data: nil})
@@ -354,4 +398,27 @@ func Get115Files(parentId string, account *models.Account, page, pageSize int) (
 	}
 	return items, nil
 
+}
+
+func GetBaiduPanFiles(parentId string, account *models.Account, page, pageSize int) ([]*FileItem, error) {
+	client := account.GetBaiDuPanClient()
+	ctx := context.Background()
+	fileList, fileErr := client.GetFileList(ctx, parentId, 0, 0, int32((page-1)*pageSize), int32(pageSize))
+	if fileErr != nil {
+		helpers.AppLogger.Warnf("获取百度网盘目录列表失败: 父目录：%s, 错误:%v", parentId, fileErr)
+		return nil, fileErr
+	}
+	// helpers.AppLogger.Infof("成功获取百度网盘文件列表, 父目录ID: %s, 文件数量: %d", parentId, len(resp.Data))
+	items := make([]*FileItem, 0)
+	// 构建Path
+	for _, item := range fileList {
+		items = append(items, &FileItem{
+			Id:          item.Path,
+			IsDirectory: item.IsDir == 1,
+			Name:        filepath.Base(item.Path),
+			Size:        int64(item.Size),
+			ModifiedAt:  int64(item.ServerMtime),
+		})
+	}
+	return items, nil
 }

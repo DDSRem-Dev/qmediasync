@@ -28,7 +28,7 @@ func (*Migrator) TableName() string {
 func Migrate() {
 	dbFile := filepath.Join(helpers.ConfigDir, helpers.GlobalConfig.Db.File)
 	sqliteDb := db.InitSqlite3(dbFile)
-	maxVersion := 23
+	maxVersion := 24
 	if sqliteDb != nil {
 		// 从sqlite迁移数据到postgres
 		moveSqliteToPostres(sqliteDb, maxVersion)
@@ -333,6 +333,11 @@ func Migrate() {
 		// 给所有Settings设置默认值0
 		updateData["check_meta_mtime"] = 0
 		db.Db.Model(Settings{}).Where("id >= ?", 1).Updates(updateData)
+		migrator.UpdateVersionCode(db.Db)
+	}
+	if migrator.VersionCode == 23 {
+		// 给Settings表添加CheckMetaMtime字段
+		db.Db.AutoMigrate(Settings{}, SyncPath{})
 		migrator.UpdateVersionCode(db.Db)
 	}
 	helpers.AppLogger.Infof("当前数据库版本 %d", migrator.VersionCode)

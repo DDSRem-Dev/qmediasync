@@ -78,7 +78,7 @@ type Sync struct {
 }
 
 // 完成本地同步任务
-func (s *Sync) Complete() bool {
+func (s *Sync) Complete(sourceType SourceType) bool {
 	s.Status = SyncStatusCompleted
 	s.FinishAt = time.Now().Unix()
 	s.LocalFileFinishAt = s.FinishAt
@@ -91,9 +91,10 @@ func (s *Sync) Complete() bool {
 	s.Logger.Infof("同步任务已完成: %d", s.ID)
 	if s.NewUpload > 0 || s.NewMeta > 0 || s.NewStrm > 0 {
 		ctx := context.Background()
+
 		notif := &Notification{
 			Type:      SyncFinished,
-			Title:     fmt.Sprintf("✅ %s 同步完成", s.RemotePath),
+			Title:     fmt.Sprintf("✅ %s %s 同步完成", sourceType.String(), s.RemotePath),
 			Content:   fmt.Sprintf("📊 耗时: %s, 生成STRM: %s, 下载: %s, 上传: %s\n⏰ 时间: %s", s.GetDuration(), helpers.IntToString(s.NewStrm), helpers.IntToString(s.NewMeta), helpers.IntToString(s.NewUpload), time.Now().Format("2006-01-02 15:04:05")),
 			Timestamp: time.Now(),
 			Priority:  NormalPriority,
@@ -340,4 +341,14 @@ func CreateSync(syncPathId uint, sourcePath, sourcePathId, targetPath string) *S
 		return nil
 	}
 	return sync
+}
+
+func GetTodayFirstSyncByPathId(syncPathId uint) *Sync {
+	var sync Sync
+	// 计算今天0点的时间戳
+	today := time.Now().Truncate(24 * time.Hour).Unix()
+	if err := db.Db.Where("sync_path_id = ? AND created_at >= ?", syncPathId, today).First(&sync).Error; err != nil {
+		return nil
+	}
+	return &sync
 }

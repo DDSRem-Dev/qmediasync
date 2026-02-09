@@ -276,8 +276,8 @@ func Get115UrlByPickCode(c *gin.Context) {
 				return
 			}
 			helpers.AppLogger.Infof("从接口中查询到115下载链接: pickcode=%s, ua=%s => %s", pickCode, ua, cachedUrl)
-			// 缓存半小时
-			db.Cache.Set(cacheKey, []byte(cachedUrl), 1800)
+			// 缓存2小时
+			db.Cache.Set(cacheKey, []byte(cachedUrl), 7200)
 		} else {
 			helpers.AppLogger.Infof("从缓存中查询到115下载链接: pickcode=%s, ua=%s => %s", pickCode, ua, cachedUrl)
 		}

@@ -83,7 +83,7 @@ func (s *SyncStrm) CompareStrm(st *SyncFileCache) int {
 			return 0
 		}
 	}
-	if st.SourceType == models.SourceType115 {
+	if st.SourceType == models.SourceType115 || st.SourceType == models.SourceTypeBaiduPan {
 		// 比较路径是否相同
 		if s.Config.StrmUrlNeedPath == 1 {
 			stPath := filepath.ToSlash(filepath.Join(st.Path, st.FileName))

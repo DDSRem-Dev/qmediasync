@@ -473,23 +473,28 @@ func (m *movieScrapeImpl) CreateMediaFromNfo(mediaFile *models.ScrapeMediaFile) 
 		return err
 	}
 	helpers.AppLogger.Infof("已从nfo文件中读取到媒体信息，名称：%s, 年份：%d, 番号: %s, TmdbID: %d", movie.Title, movie.Year, movie.Num, movie.TmdbId)
-	media, _ := models.MakeMovieMediaFromNfo(movie)
-	existsMedia, _ := models.GetMediaByName(models.MediaTypeMovie, media.Name, media.Year)
+	var media *models.Media
+	existsMedia, _ := models.GetMediaByName(models.MediaTypeMovie, movie.Title, movie.Year)
 	if existsMedia != nil {
 		media = existsMedia
-		mediaFile.MediaId = media.ID
-		mediaFile.Media = media
 	} else {
-		media.Save()
+		media, _ = models.MakeMovieMediaFromNfo(movie)
+		err := media.Save()
+		if err != nil {
+			return err
+		}
 		helpers.AppLogger.Infof("使用nfo文件中的内容创建刮削信息，ID：%d, 名称：%s, 年份：%d, 番号: %s, TmdbID: %d", media.ID, movie.Title, movie.Year, movie.Num, movie.TmdbId)
 	}
-	if media.ID > 0 {
-		mediaFile.Name = media.Name
-		mediaFile.Year = media.Year
-		mediaFile.TmdbId = media.TmdbId
-		helpers.AppLogger.Infof("使用nfo中的信息补全刮削视频文件的信息，名称：%s, 年份：%d, 番号: %s, TmdbID: %d", media.Name, media.Year, movie.Num, media.TmdbId)
+	mediaFile.MediaId = media.ID
+	mediaFile.Media = media
+	mediaFile.Name = media.Name
+	mediaFile.Year = media.Year
+	mediaFile.TmdbId = media.TmdbId
+	helpers.AppLogger.Infof("使用nfo中的信息补全刮削视频文件的信息，名称：%s, 年份：%d, 番号: %s, TmdbID: %d", media.Name, media.Year, movie.Num, media.TmdbId)
+	fileErr := mediaFile.Save()
+	if fileErr != nil {
+		return fileErr
 	}
-	mediaFile.Save()
 	return nil
 }
 

@@ -127,6 +127,8 @@ func (task *DbDownloadTask) Download() {
 			task.Download115File()
 		case SourceTypeOpenList:
 			task.DownloadOpenListFile()
+		case SourceTypeBaiduPan:
+			task.DownloadBaiduPanFile()
 		case SourceType123:
 		}
 	case DownloadSourceEmbyMedia:
@@ -233,6 +235,42 @@ func (task *DbDownloadTask) DownloadOpenListFile() {
 	// }
 	// 下载文件到指定位置
 	downloadErr := helpers.DownloadFile(task.RemoteFileId, task.LocalFullPath, v115open.DEFAULTUA)
+	if downloadErr != nil {
+		helpers.AppLogger.Warnf("[下载] 下载文件失败: %s", downloadErr.Error())
+		task.Fail(downloadErr)
+		return
+	}
+	// 设置文件修改时间
+	task.SetMTime()
+	// 下载完成
+	task.Complete()
+}
+
+// 下载百度网盘的文件
+func (task *DbDownloadTask) DownloadBaiduPanFile() {
+	account := task.GetAccount()
+	if account == nil {
+		task.Fail(fmt.Errorf("账户不存在，无法下载文件%s", task.LocalFullPath))
+		return
+	}
+	// 标记为下载中
+	task.Downloading()
+	// 查询下载链接
+	client := account.GetBaiDuPanClient()
+	if client == nil {
+		task.Fail(fmt.Errorf("百度网盘客户端不存在，无法下载文件%s", task.LocalFullPath))
+		return
+	}
+	fileDetail, err := client.GetFileDetail(context.Background(), task.RemoteFileId, 1)
+	if err != nil {
+		helpers.AppLogger.Warnf("[下载] 获取文件详情失败: %s", err.Error())
+		task.Fail(err)
+		return
+	}
+	url := fmt.Sprintf("%s&access_token=%s", fileDetail.Dlink, account.Token)
+	helpers.AppLogger.Infof("[下载] 百度网盘文件下载链接: %s", url)
+	// 下载文件到指定位置
+	downloadErr := helpers.DownloadFile(url, task.LocalFullPath, "pan.baidu.com")
 	if downloadErr != nil {
 		helpers.AppLogger.Warnf("[下载] 下载文件失败: %s", downloadErr.Error())
 		task.Fail(downloadErr)

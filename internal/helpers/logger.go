@@ -13,6 +13,7 @@ import (
 var AppLogger *QLogger
 var V115Log *QLogger
 var OpenListLog *QLogger
+var BaiduPanLog *QLogger
 var TMDBLog *QLogger
 
 type QLogger struct {
@@ -78,7 +79,7 @@ func NewLogger(logFileName string, isConsole bool, rotate bool) *QLogger {
 	if rotate {
 		lumLogger = &lumberjack.Logger{
 			Filename:   logFile,
-			MaxSize:    100,  // 最大100MB
+			MaxSize:    10,   // 最大10MB
 			MaxBackups: 3,    // 3个备份
 			MaxAge:     7,    //days
 			Compress:   true, // disabled by default

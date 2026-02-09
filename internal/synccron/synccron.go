@@ -1,6 +1,7 @@
 package synccron
 
 import (
+	"Q115-STRM/internal/baidupan"
 	"Q115-STRM/internal/db"
 	"Q115-STRM/internal/emby"
 	"Q115-STRM/internal/helpers"
@@ -36,11 +37,11 @@ func StartSyncCron() {
 }
 
 // 开始刮削整理任务
-func StartScrapeCron() {
+func startScrapeCron() {
 	// 查询所有刮削目录
 	scrapePaths := models.GetScrapePathes()
 	if len(scrapePaths) == 0 {
-		helpers.AppLogger.Info("没有找到刮削目录")
+		// helpers.AppLogger.Info("没有找到刮削目录")
 		return
 	}
 	for _, scrapePath := range scrapePaths {
@@ -57,13 +58,16 @@ func StartScrapeCron() {
 	}
 }
 
-func Refresh115AccessToken() {
+func RefreshOAuthAccessToken() {
 	// 刷新115的访问凭证
 	// 取所有115类型的账号
 	accounts, _ := models.GetAllAccount()
 	now := time.Now().Unix()
 	for _, account := range accounts {
-		if account.SourceType == models.SourceType115 && account.RefreshToken != "" {
+		if account.RefreshToken == "" {
+			continue
+		}
+		if account.SourceType == models.SourceType115 {
 			// helpers.AppLogger.Infof("当前时间: %d, 过期时间：%d", now, account.TokenExpiriesTime-3600)
 			if account.TokenExpiriesTime-300 > now {
 				// helpers.AppLogger.Infof("115账号token未过期，账号ID: %d, 115用户名：%s， 过期时间：%s", account.ID, account.Username, time.Unix(account.TokenExpiriesTime-3600, 0).Format("2006-01-02 15:04:05"))
@@ -100,12 +104,50 @@ func Refresh115AccessToken() {
 			// 更新其他客户端的token
 			v115open.UpdateToken(account.ID, tokenData.AccessToken, tokenData.RefreshToken)
 			// 刷新成功，更新账号的token
-			helpers.AppLogger.Infof("刷新115账号token成功，账号ID: %d", account.ID)
+			helpers.AppLogger.Infof("刷新115账号token成功，账号ID: %d, 新到期时间: %s", account.ID, time.Unix(tokenData.ExpiresIn, 0).Format("2006-01-02 15:04:05"))
+		}
+		if account.SourceType == models.SourceTypeBaiduPan {
+			// 刷新百度网盘的访问凭证
+			if account.TokenExpiriesTime-86400 > now {
+				helpers.AppLogger.Infof("百度网盘账号token未过期，账号ID: %d, 百度网盘用户名：%s， 过期时间：%s", account.ID, account.Username, time.Unix(account.TokenExpiriesTime-86400, 0).Format("2006-01-02 15:04:05"))
+				continue
+			}
+			// 向授权服务器发送刷新请求，拿到新token
+			resp, err := baidupan.RefreshToken(account.ID, account.RefreshToken)
+			if err != nil {
+				helpers.AppLogger.Errorf("刷新百度网盘token失败: %s", err.Error())
+				// 清空token
+				account.ClearToken(err.Error())
+				ctx := context.Background()
+				notif := &models.Notification{
+					Type:      models.SystemAlert,
+					Title:     "🔐 百度网盘开放平台访问凭证已失效",
+					Content:   fmt.Sprintf("账号ID：%d\n用户名：%s\n请重新授权\n⏰ 时间: %s", int(account.ID), account.Username, time.Now().Format("2006-01-02 15:04:05")),
+					Timestamp: time.Now(),
+					Priority:  models.HighPriority,
+				}
+				if notificationmanager.GlobalEnhancedNotificationManager != nil {
+					if err := notificationmanager.GlobalEnhancedNotificationManager.SendNotification(ctx, notif); err != nil {
+						helpers.AppLogger.Errorf("发送访问凭证失效通知失败: %v", err)
+					}
+				}
+				continue
+			}
+			// 更新账号的token
+			if suc := account.UpdateToken(resp.AccessToken, resp.RefreshToken, resp.ExpiresIn); !suc {
+				helpers.AppLogger.Errorf("更新百度网盘账号token失败")
+				continue
+			}
+			// 更新其他客户端的token
+			baidupan.UpdateToken(account.ID, resp.AccessToken)
+			// 刷新成功，更新账号的token
+			helpers.AppLogger.Infof("刷新百度网盘账号token成功，账号ID: %d, 新到期时间: %s", account.ID, time.Unix(resp.ExpiresIn, 0).Format("2006-01-02 15:04:05"))
+			continue
 		}
 	}
 }
 
-func StartClearDownloadUploadTasks() {
+func startClearDownloadUploadTasks() {
 	helpers.AppLogger.Info("开始清除3天前的上传任务")
 	models.ClearExpireUploadTasks()
 	helpers.AppLogger.Info("开始清除3天前的下载任务")
@@ -164,7 +206,7 @@ func InitCron() {
 	}
 	GlobalCron = cron.New()
 	GlobalCron.AddFunc("0 1 * * *", func() {
-		StartClearDownloadUploadTasks()
+		startClearDownloadUploadTasks()
 	})
 	GlobalCron.AddFunc(models.SettingsGlobal.Cron, func() {
 		// helpers.AppLogger.Info("启动115网盘同步任务")
@@ -177,11 +219,11 @@ func InitCron() {
 	})
 	GlobalCron.AddFunc("*/5 * * * *", func() {
 		// helpers.AppLogger.Info("定时刷新115的访问凭证")
-		Refresh115AccessToken()
+		RefreshOAuthAccessToken()
 	})
 	GlobalCron.AddFunc("*/13 * * * *", func() {
 		// helpers.AppLogger.Info("启动刮削任务")
-		StartScrapeCron()
+		startScrapeCron()
 	})
 	if config, err := models.GetEmbyConfig(); err == nil {
 		if config.EmbyApiKey != "" && config.EmbyUrl != "" {

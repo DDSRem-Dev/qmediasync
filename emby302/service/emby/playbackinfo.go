@@ -208,7 +208,8 @@ func handleSpecialPlayback(c *gin.Context, itemInfo ItemInfo) bool {
 		// 2. 以windows盘符开头, 正则匹配
 		pattern := `^[A-Za-z]:`
 		matchedWin, _ := regexp.MatchString(pattern, path)
-		if strings.HasPrefix(path, "/") || matchedWin {
+		// \\开头是Emby网络共享地址
+		if strings.HasPrefix(path, "/") || matchedWin || strings.HasPrefix(path, "\\") {
 			logs.Info("本地媒体: %s, 回源处理", path)
 			flag = true
 		}
