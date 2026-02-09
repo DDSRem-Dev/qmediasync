@@ -340,28 +340,27 @@ if gh release create "$TAG" \
     
     if echo "$TELEGRAM_RESPONSE" | grep -q '"ok":true'; then
         print_colored "green" "✓ Release notes sent to Telegram successfully"
-        
-        # Send MeoW notification after successful Telegram message
-        print_colored "cyan" "Sending release notes to MeoW..."
-        MEOW_API_URL="${MEOW_API_URL:-}"
-        
-        # Escape special characters for JSON
-        MEOW_MESSAGE=$(echo "$RELEASE_BODY" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
-        
-        # Send message to MeoW
-        MEOW_RESPONSE=$(curl -s -X POST "$MEOW_API_URL" \
-            -H "Content-Type:  text/plain" \
-            -d "${MEOW_MESSAGE}")
-        
-        if echo "$MEOW_RESPONSE" | grep -q '"success":true'; then
-            print_colored "green" "✓ Release notes sent to MeoW successfully"
-        else
-            print_colored "yellow" "Warning: Failed to send message to MeoW"
-            print_colored "yellow" "Response: $MEOW_RESPONSE"
-        fi
     else
         print_colored "yellow" "Warning: Failed to send message to Telegram"
         print_colored "yellow" "Response: $TELEGRAM_RESPONSE"
+    fi
+    # Send MeoW notification after successful Telegram message
+    print_colored "cyan" "Sending release notes to MeoW..."
+    MEOW_API_URL="${MEOW_API_URL:-}"
+    
+    # Escape special characters for JSON
+    MEOW_MESSAGE=$(echo "$RELEASE_BODY" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
+    
+    # Send message to MeoW
+    MEOW_RESPONSE=$(curl -s -X POST "$MEOW_API_URL" \
+        -H "Content-Type:  text/plain" \
+        -d "${MEOW_MESSAGE}")
+    
+    if echo "$MEOW_RESPONSE" | grep -q '"success":true'; then
+        print_colored "green" "✓ Release notes sent to MeoW successfully"
+    else
+        print_colored "yellow" "Warning: Failed to send message to MeoW"
+        print_colored "yellow" "Response: $MEOW_RESPONSE"
     fi
 else
     print_colored "red" "Error: Failed to create GitHub Release"

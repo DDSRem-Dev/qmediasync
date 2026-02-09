@@ -116,7 +116,13 @@ func TransferPlaybackInfo(c *gin.Context) {
 		if strings.HasPrefix(embyPath, "/") || matchedWin {
 			return nil
 		}
-
+		var path string
+		var ok bool
+		// path 解码
+		if path, ok = source.Attr("Path").String(); ok {
+			source.Attr("Path").Set(urls.Unescape(path))
+		}
+		logs.Info("Path 解码后: %s", path)
 		// 转换直链链接
 		source.Put("SupportsDirectPlay", jsons.FromValue(true))
 		source.Put("SupportsDirectStream", jsons.FromValue(true))
@@ -124,12 +130,10 @@ func TransferPlaybackInfo(c *gin.Context) {
 			"/videos/%s/stream?MediaSourceId=%s&%s=%s&Static=true",
 			itemInfo.Id, source.Attr("Id").Val(), itemInfo.ApiKeyName, itemInfo.ApiKey,
 		)
-		source.Put("DirectStreamUrl", jsons.FromValue(newUrl))
-
-		// path 解码
-		if path, ok := source.Attr("Path").String(); ok {
-			source.Attr("Path").Set(urls.Unescape(path))
+		if strings.Contains(path, "baidupan/url") {
+			newUrl += "&urltype=baidu.com"
 		}
+		source.Put("DirectStreamUrl", jsons.FromValue(newUrl))
 
 		source.Put("SupportsTranscoding", jsons.FromValue(false))
 		source.DelKey("TranscodingUrl")
