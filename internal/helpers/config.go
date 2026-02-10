@@ -144,6 +144,30 @@ func loadYaml(configPath string, cfg interface{}) error {
 
 func MakeOldConfig() error {
 	yamlConfig := MakeDefaultConfig()
+	if err := LoadEnvFromFile(filepath.Join(RootDir, "config", ".env")); err != nil {
+		return err
+	}
+	host := os.Getenv("DB_HOST")
+	if host != "" {
+		yamlConfig.Db.PostgresConfig.Host = host
+	}
+	port := os.Getenv("DB_PORT")
+	if port != "" {
+		yamlConfig.Db.PostgresConfig.Port = StringToInt(port)
+	}
+	user := os.Getenv("DB_USER")
+	if user != "" {
+		yamlConfig.Db.PostgresConfig.User = user
+	}
+	password := os.Getenv("DB_PASSWORD")
+	if password != "" {
+		yamlConfig.Db.PostgresConfig.Password = password
+	}
+	database := os.Getenv("DB_NAME")
+	if database != "" {
+		yamlConfig.Db.PostgresConfig.Database = database
+	}
+
 	return SaveConfig(yamlConfig)
 }
 

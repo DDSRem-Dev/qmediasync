@@ -599,7 +599,7 @@ func initEnv() bool {
 		if helpers.PathExists(oldPostgresDataDir) {
 			log.Printf("发现旧的数据库数据目录: %s", oldPostgresDataDir)
 			// 生成新的配置文件
-			if err := helpers.InitConfig(); err != nil {
+			if err := helpers.MakeOldConfig(); err != nil {
 				log.Printf("生成新的配置文件失败: %v", err)
 				return false
 			}
@@ -678,7 +678,6 @@ func parseParams() {
 func main() {
 	getRootDir()
 	parseParams()
-	// helpers.LoadEnvFromFile(filepath.Join(helpers.RootDir, "config", ".env"))
 	if !initEnv() {
 		return
 	}
