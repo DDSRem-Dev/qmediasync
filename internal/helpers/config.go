@@ -28,7 +28,7 @@ const (
 	PostgresTypeExternal PostgresType = "external"
 )
 
-type configLog struct {
+type ConfigLog struct {
 	File       string `yaml:"file"`
 	V115       string `yaml:"v115"`
 	OpenList   string `yaml:"openList"`
@@ -48,14 +48,14 @@ type PostgresConfig struct {
 	MaxIdleConns int    `yaml:"maxIdleConns"`
 }
 
-type configDb struct {
+type ConfigDb struct {
 	Engine         DbEngine       `yaml:"engine"`         // 使用的数据库引擎，可选值：sqlite, postgres
 	SqliteFile     string         `yaml:"sqliteFile"`     // SQLite数据库文件路径
 	PostgresType   PostgresType   `yaml:"postgresType"`   // PostgreSQL数据库类型，可选值：embedded, external
 	PostgresConfig PostgresConfig `yaml:"postgresConfig"` // PostgreSQL数据库配置
 }
 
-type configStrm struct {
+type ConfigStrm struct {
 	VideoExt     []string `yaml:"videoExt"`
 	MinVideoSize int64    `yaml:"minVideoSize"` // 最小视频大小，单位字节
 	MetaExt      []string `yaml:"metaExt"`
@@ -63,13 +63,13 @@ type configStrm struct {
 }
 
 type Config struct {
-	Log           configLog  `yaml:"log"`
-	Db            configDb   `yaml:"db"`
+	Log           ConfigLog  `yaml:"log"`
+	Db            ConfigDb   `yaml:"db"`
 	CacheSize     int        `yaml:"cacheSize"` // 数据库缓存大小，单位字节
 	JwtSecret     string     `yaml:"jwtSecret"`
 	HttpHost      string     `yaml:"httpHost"`  // HTTP主机地址
 	HttpsHost     string     `yaml:"httpsHost"` // HTTPS主机地址
-	Strm          configStrm `yaml:"strm"`
+	Strm          ConfigStrm `yaml:"strm"`
 	AuthServer    string     `yaml:"authServer"`
 	BaiDuPanAppId string     `yaml:"baiDuPanAppId"`
 }
@@ -140,4 +140,56 @@ func loadYaml(configPath string, cfg interface{}) error {
 	}
 
 	return nil
+}
+
+func MakeOldConfig() error {
+	yamlConfig := MakeDefaultConfig()
+	return SaveConfig(yamlConfig)
+}
+
+func SaveConfig(config *Config) error {
+	configPath := filepath.Join(ConfigDir, "config.yaml")
+	configData, err := yaml.Marshal(config)
+	if err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(configPath, configData, 0644); err != nil {
+		return err
+	}
+	return nil
+}
+
+func MakeDefaultConfig() *Config {
+	return &Config{
+		Log: ConfigLog{
+			File:       "logs/app.log",
+			V115:       "logs/115.log",
+			OpenList:   "logs/openList.log",
+			TMDB:       "logs/tmdb.log",
+			BaiduPan:   "logs/baidupan.log",
+			Web:        "logs/web.log",
+			SyncLogDir: "logs/sync",
+		},
+		Db: ConfigDb{
+			Engine:       DbEnginePostgres,
+			SqliteFile:   "qmediasync.db",
+			PostgresType: PostgresTypeEmbedded,
+			PostgresConfig: PostgresConfig{
+				Host:         "localhost",
+				Port:         5432,
+				User:         "qms",
+				Password:     "qms123456",
+				Database:     "qms",
+				MaxOpenConns: 25,
+				MaxIdleConns: 25,
+			},
+		},
+		CacheSize:     20971520,
+		JwtSecret:     "Q115-STRM-JWT-TOKEN-250706",
+		HttpHost:      ":12333",
+		HttpsHost:     ":12332",
+		AuthServer:    "https://api.mqfamily.top",
+		BaiDuPanAppId: "QMediaSync",
+	}
 }

@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gopkg.in/yaml.v2"
 )
 
 var Version string = "v0.0.1"
@@ -595,9 +594,22 @@ func initEnv() bool {
 	helpers.IsFirstRun = !helpers.PathExists(configPath)
 	// 如果不存在，启动一个简易web服务来配置数据库连接信息
 	if helpers.IsFirstRun {
-		log.Printf("配置文件不存在，启动简单配置服务: %s", configPath)
-		StartConfigWebServer()
-		return false
+		// 检查是否有旧的数据库配置和记录，有的话生成配置文件，跳过配置流程
+		oldPostgresDataDir := filepath.Join(helpers.ConfigDir, "postgres")
+		if helpers.PathExists(oldPostgresDataDir) {
+			log.Printf("发现旧的数据库数据目录: %s", oldPostgresDataDir)
+			// 生成新的配置文件
+			if err := helpers.InitConfig(); err != nil {
+				log.Printf("生成新的配置文件失败: %v", err)
+				return false
+			}
+			log.Printf("已生成配置文件: %s", configPath)
+			helpers.IsFirstRun = false
+		} else {
+			log.Printf("配置文件不存在，启动简单配置服务: %s", configPath)
+			StartConfigWebServer()
+			return false
+		}
 	}
 	log.Printf("配置文件存在，加载配置文件: %s", configPath)
 	// 如果存在，则加载配置文件，进行其他的初始化工作
@@ -824,62 +836,36 @@ func StartConfigWebServer() {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
-
-		yamlConfig := map[string]interface{}{
-			"log": map[string]interface{}{
-				"file":       "logs/app.log",
-				"v115":       "logs/115.log",
-				"openList":   "logs/openList.log",
-				"tmdb":       "logs/tmdb.log",
-				"baiduPan":   "logs/baidupan.log",
-				"syncLogDir": "logs/sync",
-			},
-			"db": map[string]interface{}{
-				"engine":     req.Engine,
-				"sqliteFile": "qmediasync.db",
-			},
-			"cacheSize":     20971520,
-			"jwtSecret":     "Q115-STRM-JWT-TOKEN-250706",
-			"httpHost":      ":12333",
-			"httpsHost":     ":12332",
-			"authServer":    "https://api.mqfamily.top",
-			"baiDuPanAppId": "QMediaSync",
-		}
-
+		yamlConfig := helpers.MakeDefaultConfig()
 		if req.Engine == string(helpers.DbEnginePostgres) {
-			yamlConfig["db"].(map[string]interface{})["postgresType"] = req.PostgresType
+			yamlConfig.Db.PostgresType = helpers.PostgresType(req.PostgresType)
 			if req.PostgresType == string(helpers.PostgresTypeExternal) {
-				yamlConfig["db"].(map[string]interface{})["postgresConfig"] = map[string]interface{}{
-					"host":         req.Host,
-					"port":         req.Port,
-					"user":         req.User,
-					"password":     req.Password,
-					"database":     req.Database,
-					"maxOpenConns": 25,
-					"maxIdleConns": 25,
+				yamlConfig.Db.PostgresConfig = helpers.PostgresConfig{
+					Host:         req.Host,
+					Port:         req.Port,
+					User:         req.User,
+					Password:     req.Password,
+					Database:     req.Database,
+					MaxOpenConns: 25,
+					MaxIdleConns: 25,
 				}
 			} else {
-				yamlConfig["db"].(map[string]interface{})["postgresConfig"] = map[string]interface{}{
-					"host":         "localhost",
-					"port":         5432,
-					"user":         "qms",
-					"password":     "qms123456",
-					"database":     "qms",
-					"maxOpenConns": 25,
-					"maxIdleConns": 25,
+				yamlConfig.Db.PostgresConfig = helpers.PostgresConfig{
+					Host:         "localhost",
+					Port:         5432,
+					User:         "qms",
+					Password:     "qms123456",
+					Database:     "qms",
+					MaxOpenConns: 25,
+					MaxIdleConns: 25,
 				}
 			}
+		} else {
+			yamlConfig.Db.Engine = helpers.DbEngineSqlite
 		}
 
-		configPath := filepath.Join(helpers.ConfigDir, "config.yaml")
-		configData, err := yaml.Marshal(yamlConfig)
-		if err != nil {
-			c.JSON(500, gin.H{"error": "生成配置失败: " + err.Error()})
-			return
-		}
-
-		if err := os.WriteFile(configPath, configData, 0644); err != nil {
-			c.JSON(500, gin.H{"error": "写入配置文件失败: " + err.Error()})
+		if err := helpers.SaveConfig(yamlConfig); err != nil {
+			c.JSON(500, gin.H{"error": "保存配置失败: " + err.Error()})
 			return
 		}
 
