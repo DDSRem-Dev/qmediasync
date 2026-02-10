@@ -82,7 +82,7 @@ func IsPostgres() bool {
 // getPostgresBinaryPath 获取PostgreSQL二进制路径
 func GetPostgresBinaryPath(embeddedBasePath string) string {
 	if helpers.IsRunningInDocker() {
-		return "/usr/lib/postgresql/15/bin" // Docker 容器中的路径
+		return "" // Docker 容器中的路径
 	}
 	// 根据平台返回二进制路径
 	goos := runtime.GOOS
