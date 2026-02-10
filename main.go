@@ -815,8 +815,10 @@ func replaceDir(srcDir, dstDir, backupDir string) {
 }
 
 func StartConfigWebServer() {
+	if helpers.IsRelease {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.Default()
-
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(200, "db_config.html", gin.H{
 			"title": "数据库配置",
@@ -879,7 +881,7 @@ func StartConfigWebServer() {
 
 	r.LoadHTMLGlob(filepath.Join(helpers.RootDir, "web_statics", "*.html"))
 
-	fmt.Printf("配置服务已启动，请在浏览器中访问: http://localhost:12333\n")
+	fmt.Printf("配置服务已启动，请在浏览器中访问: http://ip:12333\n")
 	if err := r.Run(":12333"); err != nil {
 		log.Fatalf("启动配置服务失败: %v", err)
 	}

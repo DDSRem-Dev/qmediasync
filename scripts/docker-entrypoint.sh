@@ -6,12 +6,48 @@ echo "=== 启动 QMS (Docker 模式) ==="
 # 设置环境变量
 export DOCKER=1
 
+if [ -n "$GPID" ]; then
+    echo "使用GPID: $GPID"
+    export GPID
+else
+    echo "未设置GPID环境变量，使用默认值"
+fi
+
 if [ -n "$GUID" ]; then
     echo "使用GUID: $GUID"
     export GUID
 else
     echo "未设置GUID环境变量，使用默认值"
 fi
+
+# 创建用户和组
+setup_user_and_group() {
+    if [ -n "$GPID" ]; then
+        if ! getent group "$GPID" >/dev/null 2>&1; then
+            echo "组 $GPID 不存在，创建组..."
+            addgroup -g "$GPID" "$GPID" 2>/dev/null || addgroup "$GPID"
+            echo "组 $GPID 创建完成"
+        else
+            echo "组 $GPID 已存在"
+        fi
+    fi
+
+    if [ -n "$GUID" ]; then
+        if ! id "$GUID" >/dev/null 2>&1; then
+            echo "用户 $GUID 不存在，创建用户..."
+            USER_GROUP=""
+            if [ -n "$GPID" ]; then
+                USER_GROUP="-G $GPID"
+            fi
+            adduser -u "$GUID" $USER_GROUP -D "$GUID" 2>/dev/null || adduser -D "$GUID"
+            echo "用户 $GUID 创建完成"
+        else
+            echo "用户 $GUID 已存在"
+        fi
+    fi
+}
+
+setup_user_and_group
 
 # 启动文件监视
 echo "启动文件更新监视器..."
@@ -37,7 +73,7 @@ trap 'handle_signal' INT TERM
 # 主循环，确保可以多次更新
 while true; do
     # 启动主进程，支持GPID和GUID环境变量
-    if [ -n "$GPID" ]; then
+    if [ -n "$GUID" ]; then
         echo "使用GUID=$GUID 启动主程序"
         if id "$GUID" >/dev/null 2>&1; then
             echo "切换到用户 $GUID 并启动主程序"
@@ -47,7 +83,7 @@ while true; do
             /app/QMediaSync &
         fi
     else
-        echo "未设置GPID，使用默认参数启动主程序"
+        echo "未设置GUID，使用默认参数启动主程序"
         /app/QMediaSync &
     fi
     MAIN_PID=$!
