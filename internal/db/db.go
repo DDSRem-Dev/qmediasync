@@ -49,7 +49,7 @@ func InitPostgres(dbConfig *database.Config) error {
 
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=postgres sslmode=%s",
 		dbConfig.Host, dbConfig.Port, dbConfig.User, dbConfig.Password, dbConfig.SSLMode)
-
+	helpers.AppLogger.Infof("连接数据库: %s", connStr)
 	sqlDB, cerr := sql.Open("postgres", connStr)
 	if cerr != nil {
 		helpers.AppLogger.Errorf("连接数据库失败: %v", cerr)
