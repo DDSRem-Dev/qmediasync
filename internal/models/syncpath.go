@@ -3,7 +3,7 @@ package models
 import (
 	"Q115-STRM/internal/db"
 	"Q115-STRM/internal/helpers"
-	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -42,25 +42,9 @@ func (s SourceType) String() string {
 	}
 }
 
-type SyncPathSetting struct {
-	MinVideoSize    int64    `json:"min_video_size"`                     // 最小视频大小，单位字节,-1表示使用STRM设置
-	VideoExt        string   `json:"-"`                                  // 视频文件扩展名，JSON格式
-	VideoExtArr     []string `json:"video_ext_arr" gorm:"-"`             // 视频文件扩展名数组，不参与数据库操作，仅供前端使用
-	MetaExt         string   `json:"-"`                                  // 元数据文件扩展名，JSON格式
-	MetaExtArr      []string `json:"meta_ext_arr" gorm:"-"`              // 元数据文件扩展名数组，不参与数据库操作，仅供前端使用
-	ExcludeName     string   `json:"-"`                                  // 排除的文件名，JSON格式
-	ExcludeNameArr  []string `json:"exclude_name_arr" gorm:"-"`          // 排除的文件名数组，不参与数据库操作，仅供前端使用
-	UploadMeta      int      `json:"upload_meta" gorm:"default:-1"`      // 是否上传元数据，-1表示使用STRM设置，0表示保留，1表示上传，2-表示删除
-	DownloadMeta    int      `json:"download_meta" gorm:"default:-1"`    // 是否下载元数据，-1表示使用STRM设置，0表示不下载，1表示下载
-	DeleteDir       int      `json:"delete_dir" gorm:"default:-1"`       // 是否删除目录，-1表示使用STRM设置，0表示不删除，1表示删除
-	AddPath         int      `json:"add_path" gorm:"default:-1"`         // 是否添加路径，默认-1(使用settings的值), 1- 表示添加路径， 2-表示不添加路径
-	CheckMetaMtime  int      `json:"check_meta_mtime" gorm:"default:-1"` // 是否检查元数据文件修改时间，默认-1(使用settings的值), 0表示不检查，1表示检查
-	BaiduSyncMethod int      `json:"baidu_sync_method" gorm:"default:1"` // 百度网盘同步方法，默认: 1, 1表示递归法，2表示直接查询递归文件接口（每分钟8次请求）
-}
-
 type SyncPath struct {
 	BaseModel
-	SyncPathSetting
+	SettingStrm
 	CustomConfig bool       `json:"custom_config"`          // 是否自定义配置
 	BaseCid      string     `json:"base_cid" gorm:"unique"` // 同步源路径的目录ID,115网盘和123网盘需要该字段
 	LocalPath    string     `json:"local_path"`             // 存放strm文件和元数据文件的本地路径
@@ -72,6 +56,25 @@ type SyncPath struct {
 	AccountName  string     `json:"account_name" gorm:"-"`  // 115账号名或者123账号名，不参与数据库操作，仅供前端使用
 	IsFullSync   bool       `json:"is_full_sync"`           // 是否全量同步，默认false
 	IsRunning    int        `json:"is_running" gorm:"-"`    // 是否正在运行 0-未运行，1-已在队列，2-正在运行
+}
+
+func GetStrmSettingDefault() SettingStrm {
+	return SettingStrm{
+		StrmBaseUrl:    "",
+		Cron:           "",
+		MinVideoSize:   -1,
+		AddPath:        -1,
+		CheckMetaMtime: -1,
+		UploadMeta:     -1,
+		DownloadMeta:   -1,
+		DeleteDir:      -1,
+		VideoExtArr:    []string{},
+		MetaExtArr:     []string{},
+		ExcludeNameArr: []string{},
+		VideoExt:       "",
+		MetaExt:        "",
+		ExcludeName:    "",
+	}
 }
 
 func (sp *SyncPath) GetUploadMeta() int {
@@ -137,8 +140,22 @@ func (sp *SyncPath) GetCheckMetaMtime() int {
 	return sp.CheckMetaMtime
 }
 
+func (sp *SyncPath) GetCron() string {
+	if sp.Cron == "" {
+		return SettingsGlobal.Cron
+	}
+	return sp.Cron
+}
+
+func (sp *SyncPath) GetStrmBaseUrl() string {
+	if sp.StrmBaseUrl == "" {
+		return SettingsGlobal.StrmBaseUrl
+	}
+	return sp.StrmBaseUrl
+}
+
 // 修改同步路径
-func (sp *SyncPath) Update(sourceType SourceType, accountId uint, baseCid, localPath, remotePath string, enableCron bool, customConfig bool, syncPathSetting SyncPathSetting) bool {
+func (sp *SyncPath) Update(sourceType SourceType, accountId uint, baseCid, localPath, remotePath string, enableCron bool, customConfig bool, syncPathSetting SettingStrm) bool {
 	if runtime.GOOS != "windows" {
 		localPath = strings.TrimRight(localPath, "/")
 		remotePath = strings.Trim(remotePath, "/")
@@ -147,62 +164,31 @@ func (sp *SyncPath) Update(sourceType SourceType, accountId uint, baseCid, local
 		remotePath = strings.TrimRight(remotePath, "\\")
 	}
 	if customConfig {
-		// 全部转小写
-		for i, v := range syncPathSetting.VideoExtArr {
-			syncPathSetting.VideoExtArr[i] = strings.ToLower(v)
-		}
-		for i, v := range syncPathSetting.MetaExtArr {
-			syncPathSetting.MetaExtArr[i] = strings.ToLower(v)
-		}
-		for i, v := range syncPathSetting.ExcludeNameArr {
-			syncPathSetting.ExcludeNameArr[i] = strings.ToLower(v)
-		}
-		videoExtStr, err := json.Marshal(syncPathSetting.VideoExtArr)
-		if err != nil {
-			helpers.AppLogger.Errorf("视频扩展名转换为JSON失败: %v", err)
+		strmSetting := syncPathSetting.EncodeArr()
+		if strmSetting == nil {
+			helpers.AppLogger.Errorf("将同步路径设置编码为JSON字符串失败")
 			return false
 		}
-		metaExtStr, err := json.Marshal(syncPathSetting.MetaExtArr)
-		if err != nil {
-			helpers.AppLogger.Errorf("元数据扩展名转换为JSON失败: %v", err)
-			return false
-		}
-		// 排除的名字
-		excludeNameStr, err := json.Marshal(syncPathSetting.ExcludeNameArr)
-		if err != nil {
-			helpers.AppLogger.Errorf("将排除的名字转换为JSON字符串失败: %v", err)
-			return false
-		}
-		syncPathSetting.VideoExt = string(videoExtStr)
-		syncPathSetting.MetaExt = string(metaExtStr)
-		syncPathSetting.ExcludeName = string(excludeNameStr)
+		sp.SettingStrm = *strmSetting
 	} else {
-		syncPathSetting.VideoExt = ""
-		syncPathSetting.MetaExt = ""
-		syncPathSetting.ExcludeName = ""
+		// 全部使用默认值
+		sp.SettingStrm = GetStrmSettingDefault()
 	}
 	sp.CustomConfig = customConfig
 	sp.BaseCid = baseCid
 	sp.LocalPath = localPath
 	sp.RemotePath = remotePath
 	sp.EnableCron = enableCron
-	sp.SyncPathSetting = syncPathSetting
 	// 使用 map 保存需要更新的字段
 	updates := map[string]interface{}{
-		"custom_config":  customConfig,
-		"base_cid":       baseCid,
-		"local_path":     localPath,
-		"remote_path":    remotePath,
-		"enable_cron":    enableCron,
-		"min_video_size": syncPathSetting.MinVideoSize,
-		"video_ext":      syncPathSetting.VideoExt,
-		"meta_ext":       syncPathSetting.MetaExt,
-		"exclude_name":   syncPathSetting.ExcludeName,
-		"upload_meta":    syncPathSetting.UploadMeta,
-		"download_meta":  syncPathSetting.DownloadMeta,
-		"delete_dir":     syncPathSetting.DeleteDir,
-		"add_path":       syncPathSetting.AddPath,
+		"custom_config": customConfig,
+		"base_cid":      baseCid,
+		"local_path":    localPath,
+		"remote_path":   remotePath,
+		"enable_cron":   enableCron,
 	}
+	strmSettingMap := sp.SettingStrm.ToMap(true)
+	maps.Copy(updates, strmSettingMap)
 	result := db.Db.Model(sp).Updates(updates)
 	// 创建同步路径
 	fullPath := filepath.Join(localPath, remotePath)
@@ -255,31 +241,7 @@ func (sp *SyncPath) GetFullLocalPath() string {
 }
 
 func (sp *SyncPath) ParseVideoAndMetaExt() {
-	var err error
-	sp.VideoExtArr = make([]string, 0)
-	sp.MetaExtArr = make([]string, 0)
-	sp.ExcludeNameArr = make([]string, 0)
-	if sp.VideoExt != "" {
-		// 解析视频扩展名
-		err = json.Unmarshal([]byte(sp.VideoExt), &sp.VideoExtArr)
-		if err != nil {
-			helpers.AppLogger.Errorf("视频扩展名解析失败: %v", err)
-		}
-	}
-	// 解析元数据扩展名
-	if sp.MetaExt != "" {
-		err = json.Unmarshal([]byte(sp.MetaExt), &sp.MetaExtArr)
-		if err != nil {
-			helpers.AppLogger.Errorf("元数据扩展名解析失败: %v", err)
-		}
-	}
-	if sp.ExcludeName != "" {
-		// 解析排除的名字
-		err = json.Unmarshal([]byte(sp.ExcludeName), &sp.ExcludeNameArr)
-		if err != nil {
-			helpers.AppLogger.Errorf("排除的名字解析失败: %v", err)
-		}
-	}
+	sp.SettingStrm = *sp.SettingStrm.DecodeArr()
 }
 
 func (sp *SyncPath) UpdateLastSync() {
@@ -331,7 +293,7 @@ func (sp *SyncPath) MakeFullLocalPath(pid, name string) string {
 }
 
 // 创建同步路径
-func CreateSyncPath(sourceType SourceType, accountId uint, baseCid, localPath, remotePath string, enableCron bool, customConfig bool, syncPathSetting SyncPathSetting) *SyncPath {
+func CreateSyncPath(sourceType SourceType, accountId uint, baseCid, localPath, remotePath string, enableCron bool, customConfig bool, syncPathSetting SettingStrm) *SyncPath {
 	if runtime.GOOS != "windows" {
 		localPath = strings.TrimRight(localPath, "/")
 		remotePath = strings.TrimRight(remotePath, "/")
@@ -340,63 +302,23 @@ func CreateSyncPath(sourceType SourceType, accountId uint, baseCid, localPath, r
 		remotePath = strings.TrimRight(remotePath, "\\")
 	}
 
-	var err error
 	if customConfig {
-		var videoExtBytes, metaExtBytes, excludeNameBytes []byte
-		// 全部转小写
-		for i, v := range syncPathSetting.VideoExtArr {
-			syncPathSetting.VideoExtArr[i] = strings.ToLower(v)
-		}
-		for i, v := range syncPathSetting.MetaExtArr {
-			syncPathSetting.MetaExtArr[i] = strings.ToLower(v)
-		}
-		for i, v := range syncPathSetting.ExcludeNameArr {
-			syncPathSetting.ExcludeNameArr[i] = strings.ToLower(v)
-		}
-		videoExtBytes, err = json.Marshal(syncPathSetting.VideoExtArr)
-		if err != nil {
-			helpers.AppLogger.Errorf("视频扩展名转换为JSON失败: %v", err)
-			return nil
-		}
-		syncPathSetting.VideoExt = string(videoExtBytes)
-		metaExtBytes, err = json.Marshal(syncPathSetting.MetaExtArr)
-		if err != nil {
-			helpers.AppLogger.Errorf("元数据扩展名转换为JSON失败: %v", err)
-			return nil
-		}
-		syncPathSetting.MetaExt = string(metaExtBytes)
-		// 排除的名字
-		excludeNameBytes, err = json.Marshal(syncPathSetting.ExcludeNameArr)
-		if err != nil {
-			helpers.AppLogger.Errorf("将排除的名字转换为JSON字符串失败: %v", err)
-			return nil
-		}
-		syncPathSetting.ExcludeName = string(excludeNameBytes)
+		syncPathSetting = *syncPathSetting.DecodeArr()
 	} else {
-		syncPathSetting.VideoExt = ""
-		syncPathSetting.MetaExt = ""
-		syncPathSetting.ExcludeName = ""
+		syncPathSetting = GetStrmSettingDefault()
 	}
 	// 使用map[string]interface{}格式入库，避免0值不入库
 	syncPathData := map[string]interface{}{
-		"source_type":    sourceType,
-		"base_cid":       baseCid,
-		"local_path":     localPath,
-		"remote_path":    remotePath,
-		"account_id":     accountId,
-		"enable_cron":    enableCron,
-		"custom_config":  customConfig,
-		"video_ext":      syncPathSetting.VideoExt,
-		"meta_ext":       syncPathSetting.MetaExt,
-		"exclude_name":   syncPathSetting.ExcludeName,
-		"download_meta":  syncPathSetting.DownloadMeta,
-		"upload_meta":    syncPathSetting.UploadMeta,
-		"delete_dir":     syncPathSetting.DeleteDir,
-		"min_video_size": syncPathSetting.MinVideoSize,
-		"add_path":       syncPathSetting.AddPath,
-		"created_at":     time.Now().Unix(),
-		"updated_at":     time.Now().Unix(),
+		"source_type":   sourceType,
+		"base_cid":      baseCid,
+		"local_path":    localPath,
+		"remote_path":   remotePath,
+		"account_id":    accountId,
+		"enable_cron":   enableCron,
+		"custom_config": customConfig,
 	}
+	strmSettingMap := syncPathSetting.ToMap(true)
+	maps.Copy(syncPathData, strmSettingMap)
 
 	// helpers.AppLogger.Infof("创建同步路径数据: %+v", syncPathData)
 

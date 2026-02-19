@@ -402,7 +402,12 @@ func InitNewSyncQueueManager() *NewSyncQueueManager {
 	GlobalNewSyncQueueManager = &NewSyncQueueManager{
 		queues: make(map[models.SourceType]*NewSyncQueuePerType),
 	}
-
+	models.PauseSyncQueuesFunc = func() {
+		PauseAllNewSyncQueues()
+	}
+	models.ResumeSyncQueuesFunc = func() {
+		ResumeAllNewSyncQueues()
+	}
 	return GlobalNewSyncQueueManager
 }
 

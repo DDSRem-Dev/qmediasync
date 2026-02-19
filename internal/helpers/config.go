@@ -97,6 +97,19 @@ func InitConfig() error {
 	if err := loadYaml(configPath, &GlobalConfig); err != nil {
 		return err
 	}
+	// 给strm填充默认值
+	if len(GlobalConfig.Strm.VideoExt) == 0 {
+		GlobalConfig.Strm.VideoExt = []string{".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".3gp", ".ts"}
+	}
+	if len(GlobalConfig.Strm.MetaExt) == 0 {
+		GlobalConfig.Strm.MetaExt = []string{".jpg", ".jpeg", ".png", ".webp", ".nfo", ".srt", ".ass", ".svg", ".sup", ".lrc"}
+	}
+	// if GlobalConfig.Strm.MinVideoSize == 0 {
+	GlobalConfig.Strm.MinVideoSize = 100 // 100MB
+	// }
+	// if GlobalConfig.Strm.Cron == "" {
+	GlobalConfig.Strm.Cron = "30 * * * *" // 每小时30分执行
+	// }
 	return nil
 }
 
@@ -219,5 +232,11 @@ func MakeDefaultConfig() *Config {
 		BaiDuPanAppId: "QMediaSync",
 		AdminUsername: "admin",
 		AdminPassword: "admin123",
+		Strm: ConfigStrm{
+			VideoExt:     []string{".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".3gp", ".ts"},
+			MetaExt:      []string{".jpg", ".jpeg", ".png", ".webp", ".nfo", ".srt", ".ass", ".svg", ".sup", ".lrc"},
+			MinVideoSize: 100,          // 100MB
+			Cron:         "30 * * * *", // 每小时30分执行
+		},
 	}
 }

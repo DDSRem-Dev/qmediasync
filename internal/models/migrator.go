@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"golang.org/x/crypto/bcrypt"
@@ -26,27 +25,14 @@ func (*Migrator) TableName() string {
 // 如果没有数据则创建
 // 如果已有数据库则从数据库中获取版本，根据版本执行变更
 func Migrate() {
-	// dbFile := filepath.Join(helpers.ConfigDir, helpers.GlobalConfig.Db.SqliteFile)
 	// sqliteDb := db.InitSqlite3(dbFile)
-	maxVersion := 24
-	// if sqliteDb != nil {
-	// 	// 从sqlite迁移数据到postgres
-	// 	moveSqliteToPostres(sqliteDb, maxVersion)
-	// 	// 关闭sqlite连接，然后将数据库文件备份
-	// 	sqldb, _ := sqliteDb.DB()
-	// 	if sqldb != nil {
-	// 		sqldb.Close()
-	// 	}
-	// 	os.Rename(dbFile, dbFile+".bak")
-	// 	helpers.AppLogger.Infof("sqlite数据库已备份为：%s", dbFile+".bak")
-	// } else {
-	// 	// 先初始化所有表和基础数据
+	maxVersion := 25
+	// 先初始化所有表和基础数据
 	if !InitDB(maxVersion) {
 		// 初始化数据库版本表
 		helpers.AppLogger.Info("已完成数据库初始化")
 		return
 	}
-	// }
 	var migrator Migrator = Migrator{}
 	err := db.Db.Model(&migrator).First(&migrator).Error
 	if err != nil {
@@ -281,6 +267,7 @@ func Migrate() {
 		// 删除已存在的同步缓存表
 		db.Db.Exec("DROP TABLE IF EXISTS sync_files_cache")
 		migrator.UpdateVersionCode(db.Db)
+		migrator.UpdateVersionCode(db.Db) // 增加到18
 	}
 	if migrator.VersionCode == 18 {
 		// 给User表添加IsAdmin字段
@@ -330,6 +317,23 @@ func Migrate() {
 		db.Db.AutoMigrate(Settings{}, SyncPath{})
 		migrator.UpdateVersionCode(db.Db)
 	}
+	if migrator.VersionCode == 24 {
+		db.Db.AutoMigrate(BackupConfig{}, BackupRecord{})
+		// 插入默认配置
+		db.Db.Create(&BackupConfig{
+			BaseModel:       BaseModel{ID: 1},
+			BackupEnabled:   0,
+			BackupPath:      "backups",
+			BackupRetention: 7,
+			BackupMaxCount:  7,
+			BackupCompress:  1,
+			BackupCron:      "0 2 * * *",
+		})
+	}
+	if migrator.VersionCode == 25 {
+		db.Db.AutoMigrate(SyncPath{})
+		migrator.UpdateVersionCode(db.Db)
+	}
 	helpers.AppLogger.Infof("当前数据库版本 %d", migrator.VersionCode)
 }
 
@@ -344,8 +348,6 @@ func BatchCreateTable() {
 	db.Db.AutoMigrate(ScrapeSettings{}, ScrapePath{}, MovieCategory{}, TvShowCategory{}, ScrapePathCategory{}, ScrapeMediaFile{}, Media{}, MediaSeason{}, MediaEpisode{})
 	// 115请求统计表
 	db.Db.AutoMigrate(&RequestStat{})
-	// 备份相关表
-	db.Db.AutoMigrate(BackupConfig{}, BackupRecord{})
 	// Emby 同步相关表
 	db.Db.AutoMigrate(EmbyConfig{}, EmbyMediaItem{}, EmbyMediaSyncFile{}, EmbyLibrary{}, EmbyLibrarySyncPath{})
 	// 下载队列
@@ -354,6 +356,8 @@ func BatchCreateTable() {
 	db.Db.AutoMigrate(NotificationChannel{}, TelegramChannelConfig{}, MeoWChannelConfig{}, BarkChannelConfig{}, ServerChanChannelConfig{}, CustomWebhookChannelConfig{}, NotificationRule{})
 	// API Key认证表
 	db.Db.AutoMigrate(ApiKey{})
+	// 备份恢复相关表
+	db.Db.AutoMigrate(BackupConfig{}, BackupRecord{})
 }
 
 func InitMigrationTable(version int) {
@@ -381,196 +385,6 @@ func InitDB(version int) bool {
 	return false
 }
 
-func moveSqliteToPostres(sqliteDb *gorm.DB, version int) {
-	BatchCreateTable()
-	// 将用到的model数据从sqliteDb迁移到db.Db
-	var accounts []*Account
-	sqliteDb.Order("id").Find(&accounts)
-	for _, account := range accounts {
-		newAccount := Account{
-			Name:              account.Name,
-			UserId:            account.UserId,
-			Username:          account.Username,
-			Password:          account.Password,
-			Token:             account.Token,
-			RefreshToken:      account.RefreshToken,
-			TokenExpiriesTime: account.TokenExpiriesTime,
-			BaseUrl:           account.BaseUrl,
-			SourceType:        account.SourceType,
-			AppId:             account.AppId,
-		}
-		if err := db.Db.Create(&newAccount).Error; err != nil {
-			helpers.AppLogger.Errorf("迁移Account数据失败：%v", err)
-		} else {
-			helpers.AppLogger.Infof("迁移Account数据成功：%d", newAccount.ID)
-		}
-	}
-
-	var movieCategories []*MovieCategory
-	sqliteDb.Order("id").Find(&movieCategories)
-	for _, movieCategory := range movieCategories {
-		newMovieCategory := MovieCategory{
-			Name:     movieCategory.Name,
-			GenreIds: movieCategory.GenreIds,
-			Language: movieCategory.Language,
-		}
-		if err := db.Db.Create(&newMovieCategory).Error; err != nil {
-			helpers.AppLogger.Errorf("迁移MovieCategory数据失败：%v", err)
-		} else {
-			helpers.AppLogger.Infof("迁移MovieCategory数据成功：%d", newMovieCategory.ID)
-		}
-	}
-
-	var scrapePaths []*ScrapePath
-	sqliteDb.Order("id").Find(&scrapePaths)
-	for _, scrapePath := range scrapePaths {
-		newScrapePath := ScrapePath{
-			AccountId:             scrapePath.AccountId,
-			SourceType:            scrapePath.SourceType,
-			MediaType:             scrapePath.MediaType,
-			ScrapeType:            scrapePath.ScrapeType,
-			SourcePath:            scrapePath.SourcePath,
-			SourcePathId:          scrapePath.SourcePathId,
-			DestPath:              scrapePath.DestPath,
-			DestPathId:            scrapePath.DestPathId,
-			RenameType:            scrapePath.RenameType,
-			FolderNameTemplate:    scrapePath.FolderNameTemplate,
-			FileNameTemplate:      scrapePath.FileNameTemplate,
-			DeletedKeyword:        scrapePath.DeletedKeyword,
-			EnableCategory:        scrapePath.EnableCategory,
-			VideoExt:              scrapePath.VideoExt,
-			MinVideoFileSize:      scrapePath.MinVideoFileSize,
-			ExcludeNoImageActor:   scrapePath.ExcludeNoImageActor,
-			EnableAi:              scrapePath.EnableAi,
-			AiPrompt:              scrapePath.AiPrompt,
-			ForceDeleteSourcePath: scrapePath.ForceDeleteSourcePath,
-			EnableCron:            scrapePath.EnableCron,
-			EnableFanartTv:        scrapePath.EnableFanartTv,
-			IsScraping:            scrapePath.IsScraping,
-			MaxThreads:            scrapePath.MaxThreads,
-		}
-		if scrapePath.MaxThreads == 0 {
-			newScrapePath.MaxThreads = DEFAULT_LOCAL_MAX_THREADS
-		}
-		if err := db.Db.Create(&newScrapePath).Error; err != nil {
-			helpers.AppLogger.Errorf("迁移ScrapePath数据失败：%v", err)
-		} else {
-			helpers.AppLogger.Infof("迁移ScrapePath数据成功：%d", newScrapePath.ID)
-		}
-	}
-
-	var scrapeSettings ScrapeSettings
-	sqliteDb.Find(&scrapeSettings)
-	newScrapeSetting := ScrapeSettings{
-		TmdbUrl:           scrapeSettings.TmdbUrl,
-		TmdbImageUrl:      scrapeSettings.TmdbImageUrl,
-		TmdbApiKey:        scrapeSettings.TmdbApiKey,
-		TmdbAccessToken:   scrapeSettings.TmdbAccessToken,
-		TmdbLanguage:      scrapeSettings.TmdbLanguage,
-		TmdbImageLanguage: scrapeSettings.TmdbImageLanguage,
-		TmdbEnableProxy:   scrapeSettings.TmdbEnableProxy,
-	}
-	if err := db.Db.Create(&newScrapeSetting).Error; err != nil {
-		helpers.AppLogger.Errorf("迁移ScrapeSettings数据失败：%v", err)
-	} else {
-		helpers.AppLogger.Infof("迁移ScrapeSettings数据成功：%d", newScrapeSetting.ID)
-	}
-
-	var settings Settings
-	sqliteDb.Find(&settings)
-	newSettings := Settings{
-		UseTelegram:      settings.UseTelegram,
-		TelegramBotToken: settings.TelegramBotToken,
-		TelegramChatId:   settings.TelegramChatId,
-		MeoWName:         settings.MeoWName,
-		HttpProxy:        settings.HttpProxy,
-		StrmBaseUrl:      settings.StrmBaseUrl,
-		Cron:             settings.Cron,
-		MetaExt:          settings.MetaExt,
-		VideoExt:         settings.VideoExt,
-		MinVideoSize:     settings.MinVideoSize,
-		UploadMeta:       settings.UploadMeta,
-		DownloadMeta:     settings.DownloadMeta,
-		DeleteDir:        settings.DeleteDir,
-		LocalProxy:       settings.LocalProxy,
-		ExcludeName:      settings.ExcludeName,
-		// EmbyUrl:           settings.EmbyUrl,
-		// EmbyApiKey:        settings.EmbyApiKey,
-		DownloadThreads:   settings.DownloadThreads,
-		FileDetailThreads: settings.FileDetailThreads,
-	}
-	if err := db.Db.Create(&newSettings).Error; err != nil {
-		helpers.AppLogger.Errorf("迁移Settings数据失败：%v", err)
-	} else {
-		helpers.AppLogger.Infof("迁移Settings数据成功：%d", newSettings.ID)
-	}
-
-	var syncPathes []*SyncPath
-	sqliteDb.Order("id").Find(&syncPathes)
-	for _, syncPath := range syncPathes {
-		newSyncPath := SyncPath{
-			BaseCid:      syncPath.BaseCid,
-			LocalPath:    syncPath.LocalPath,
-			RemotePath:   syncPath.RemotePath,
-			SourceType:   syncPath.SourceType,
-			AccountId:    syncPath.AccountId,
-			EnableCron:   syncPath.EnableCron,
-			LastSyncAt:   syncPath.LastSyncAt,
-			CustomConfig: syncPath.CustomConfig,
-			SyncPathSetting: SyncPathSetting{
-				VideoExt:     syncPath.VideoExt,
-				MetaExt:      syncPath.MetaExt,
-				ExcludeName:  syncPath.ExcludeName,
-				MinVideoSize: -1,
-				UploadMeta:   -1,
-				DownloadMeta: -1,
-				DeleteDir:    -1,
-			},
-		}
-		if err := db.Db.Create(&newSyncPath).Error; err != nil {
-			helpers.AppLogger.Errorf("迁移SyncPath数据失败：%v", err)
-		} else {
-			helpers.AppLogger.Infof("迁移SyncPath数据成功：%d", newSyncPath.ID)
-		}
-	}
-
-	var tvShows []*TvShowCategory
-	sqliteDb.Order("id").Find(&tvShows)
-	for _, tvShow := range tvShows {
-		newTvShow := TvShowCategory{
-			Name:      tvShow.Name,
-			GenreIds:  tvShow.GenreIds,
-			Countries: tvShow.Countries,
-		}
-		if err := db.Db.Create(&newTvShow).Error; err != nil {
-			helpers.AppLogger.Errorf("迁移TvShowCategory数据失败：%v", err)
-		} else {
-			helpers.AppLogger.Infof("迁移TvShowCategory数据成功：%d", newTvShow.ID)
-		}
-	}
-
-	var users []*User
-	sqliteDb.Order("id").Find(&users)
-	for _, user := range users {
-		newUser := User{
-			Username: user.Username,
-			Password: user.Password,
-		}
-		if err := db.Db.Create(&newUser).Error; err != nil {
-			helpers.AppLogger.Errorf("迁移User数据失败：%v", err)
-		} else {
-			helpers.AppLogger.Infof("迁移User数据成功：%d", newUser.ID)
-		}
-	}
-
-	helpers.AppLogger.Info("已完成数据库迁移，数据已从sqlite迁移至postgres")
-	InitMigrationTable(version)
-	// 删除全部config/libs
-	libsPath := filepath.Join(helpers.ConfigDir, "libs")
-	os.RemoveAll(libsPath)
-	helpers.AppLogger.Infof("已删除所有config/libs目录下的文件")
-}
-
 func (m *Migrator) UpdateVersionCode(txOrDb *gorm.DB) {
 	m.VersionCode++
 	txOrDb.Updates(&m)
@@ -589,22 +403,26 @@ func InitSettings() {
 	ipv4, _ := helpers.GetLocalIP()
 	defaultSettings = Settings{
 		// 设置默认值
-		TelegramBotToken:   "",
-		TelegramChatId:     "",
-		HttpProxy:          "",
-		Cron:               helpers.GlobalConfig.Strm.Cron,
-		MetaExt:            string(metaExtStr),
-		VideoExt:           string(videoExtStr),
-		MinVideoSize:       helpers.GlobalConfig.Strm.MinVideoSize,
-		DeleteDir:          0,
-		UploadMeta:         1,
-		DownloadMeta:       1,
-		StrmBaseUrl:        fmt.Sprintf("http://%s:12333", ipv4),
-		DownloadThreads:    1,
-		FileDetailThreads:  3,
-		OpenlistQPS:        3,
-		OpenlistRetry:      1,
-		OpenlistRetryDelay: 60,
+		TelegramBotToken: "",
+		TelegramChatId:   "",
+		HttpProxy:        "",
+		SettingStrm: SettingStrm{
+			Cron:         helpers.GlobalConfig.Strm.Cron,
+			MetaExt:      string(metaExtStr),
+			VideoExt:     string(videoExtStr),
+			MinVideoSize: helpers.GlobalConfig.Strm.MinVideoSize,
+			DeleteDir:    0,
+			UploadMeta:   0,
+			DownloadMeta: 0,
+			StrmBaseUrl:  fmt.Sprintf("http://%s:12333", ipv4),
+		},
+		SettingThreads: SettingThreads{
+			DownloadThreads:    1,
+			FileDetailThreads:  3,
+			OpenlistQPS:        3,
+			OpenlistRetry:      1,
+			OpenlistRetryDelay: 60,
+		},
 	}
 	db.Db.Create(&defaultSettings)
 	helpers.AppLogger.Info("已默认添加配置")

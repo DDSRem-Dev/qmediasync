@@ -301,6 +301,11 @@ func GetBaiduPanPathList(parentId string, accountId uint) ([]DirResp, error) {
 	return items, nil
 }
 
+// 创建文件夹
+func CreateFolder(c *gin.Context) {
+
+}
+
 type FileItem struct {
 	Id          string `json:"id"`
 	IsDirectory bool   `json:"is_directory"`

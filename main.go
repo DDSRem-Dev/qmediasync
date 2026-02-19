@@ -99,7 +99,7 @@ func (app *App) Stop() {
 	// 关闭上传下载队列
 	models.GlobalDownloadQueue.Stop()
 	models.GlobalUploadQueue.Stop()
-	// 关闭定时任务
+	// 关闭定时任务（包含备份定时任务）
 	synccron.GlobalCron.Stop()
 	// 关闭数据库
 	if app.dbManager != nil {
@@ -253,7 +253,7 @@ func getRootDir() string {
 		exPath = filepath.Dir(ex)
 	} else {
 		if runtime.GOOS == "windows" {
-			exPath = "D:\\Dev\\qmediasync"
+			exPath = "E:\\Dev\\qmediasync"
 		} else {
 			exPath = "/home/qicfan/dev/qmediasync"
 		}
@@ -280,6 +280,11 @@ func getDataAndConfigDir() {
 		if err != nil {
 			fmt.Printf("创建数据目录失败: %v\n", err)
 			panic("创建数据目录失败")
+		}
+		err = os.MkdirAll(configDir, 0755)
+		if err != nil {
+			fmt.Printf("创建配置目录失败: %v\n", err)
+			panic("创建配置目录失败")
 		}
 		helpers.DataDir = dataDir
 		helpers.ConfigDir = configDir
@@ -391,7 +396,9 @@ func initOthers() {
 	// if helpers.IsRelease {
 	// 启动同步任务队列管理器
 	synccron.InitNewSyncQueueManager()
-	synccron.InitCron() // 初始化定时任务
+	synccron.InitCron() // 初始化定时任务（包含备份定时任务）
+	// 初始化备份服务
+	models.InitBackupService()
 	// }
 	// 将所有刮削中和整理中的记录改为未执行
 	models.ResetScrapePathStatus()
@@ -465,15 +472,15 @@ func setRouter(r *gin.Engine) {
 		api.GET("/path/list", controllers.GetPathList)
 		api.GET("/path/files", controllers.GetNetFileList) // 查询网盘文件列表
 		api.POST("/user/change", controllers.ChangePassword)
-		api.GET("/auth/115-status", controllers.Get115Status)                                      // 查询115状态
-		api.POST("/auth/115-qrcode-open", controllers.GetLoginQrCodeOpen)                          // 获取115开放平台登录二维码
-		api.POST("/auth/115-qrcode-status", controllers.GetQrCodeStatus)                           // 查询115二维码扫码状态
-		api.POST("/setting/http-proxy", controllers.UpdateHttpProxy)                               // 更改HTTP代理
-		api.GET("/setting/http-proxy", controllers.GetHttpProxy)                                   // 获取HTTP代理
-		api.POST("/setting/test-http-proxy", controllers.TestHttpProxy)                            // 测试HTTP代理
-		api.GET("/setting/telegram", controllers.GetTelegram)                                      // 获取telegram消息通知配置
-		api.POST("/setting/telegram", controllers.UpdateTelegram)                                  // 更改telegram消息通知配置
-		api.POST("/telegram/test", controllers.TestTelegram)                                       // 测试telegram连通性
+		api.GET("/auth/115-status", controllers.Get115Status)             // 查询115状态
+		api.POST("/auth/115-qrcode-open", controllers.GetLoginQrCodeOpen) // 获取115开放平台登录二维码
+		api.POST("/auth/115-qrcode-status", controllers.GetQrCodeStatus)  // 查询115二维码扫码状态
+		api.POST("/setting/http-proxy", controllers.UpdateHttpProxy)      // 更改HTTP代理
+		api.GET("/setting/http-proxy", controllers.GetHttpProxy)          // 获取HTTP代理
+		api.POST("/setting/test-http-proxy", controllers.TestHttpProxy)   // 测试HTTP代理
+		// api.GET("/setting/telegram", controllers.GetTelegram)                                      // 获取telegram消息通知配置
+		// api.POST("/setting/telegram", controllers.UpdateTelegram)                                  // 更改telegram消息通知配置
+		// api.POST("/telegram/test", controllers.TestTelegram)                                       // 测试telegram连通性
 		api.GET("/setting/notification/channels", controllers.GetNotificationChannels)             // 获取所有通知渠道
 		api.POST("/setting/notification/channels/telegram", controllers.CreateTelegramChannel)     // 创建Telegram渠道
 		api.GET("/setting/notification/channels/telegram/:id", controllers.GetTelegramChannel)     // 查询Telegram渠道
@@ -573,6 +580,19 @@ func setRouter(r *gin.Engine) {
 		api.POST("/download/queue/stop", controllers.StopDownloadQueue)                                  // 停止下载队列
 		api.GET("/download/queue/status", controllers.DownloadQueueStatus)                               // 查询下载队列状态
 		api.POST("/download/queue/clear-success-failed", controllers.ClearDownloadSuccessAndFailedTasks) // 清除下载队列中已完成和失败的任务
+
+		// 备份与恢复相关路由
+		api.GET("/backup/list", controllers.GetBackupList)               // 获取备份列表
+		api.GET("/backup/records/:id", controllers.GetBackupRecord)      // 获取备份记录详情
+		api.POST("/backup/create", controllers.CreateBackup)             // 创建手动备份
+		api.DELETE("/backup/records/:id", controllers.DeleteBackup)      // 删除备份记录
+		api.POST("/backup/restore", controllers.RestoreFromBackup)       // 从备份恢复
+		api.POST("/backup/upload-restore", controllers.UploadAndRestore) // 上传文件并恢复
+		api.GET("/backup/download/:id", controllers.DownloadBackup)      // 下载备份文件
+		api.GET("/backup/config", controllers.GetBackupConfig)           // 获取备份配置
+		api.PUT("/backup/config", controllers.UpdateBackupConfig)        // 更新备份配置
+		api.GET("/backup/status", controllers.GetBackupStatus)           // 获取备份状态
+		api.POST("/backup/cancel", controllers.CancelBackup)             // 取消正在运行的备份
 
 	}
 }

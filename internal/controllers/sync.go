@@ -3,6 +3,7 @@ package controllers
 import (
 	"Q115-STRM/internal/models"
 	"Q115-STRM/internal/synccron"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"runtime"
@@ -165,7 +166,7 @@ type addSyncPathRequest struct {
 	RemotePath   string            `json:"remote_path" form:"remote_path" binding:"required"` // 同步源路径，115网盘和123网盘需要该字段
 	EnableCron   bool              `json:"enable_cron" form:"enable_cron"`                    // 是否启用定时任务
 	CustomConfig bool              `json:"custom_config" form:"custom_config"`                // 自定义配置
-	models.SyncPathSetting
+	models.SettingStrm
 }
 
 // AddSyncPath 添加同步路径
@@ -189,7 +190,7 @@ type addSyncPathRequest struct {
 func AddSyncPath(c *gin.Context) {
 	var req addSyncPathRequest
 	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, APIResponse[any]{Code: BadRequest, Message: "请求参数错误", Data: nil})
+		c.JSON(http.StatusBadRequest, APIResponse[any]{Code: BadRequest, Message: fmt.Sprintf("请求参数错误: %v", err), Data: nil})
 		return
 	}
 	baseCid := req.BaseCid
@@ -225,7 +226,7 @@ func AddSyncPath(c *gin.Context) {
 	// 	baseCid = strings.ReplaceAll(req.BaseCid, "\\", "/")
 	// }
 	// 创建同步路径
-	syncPath := models.CreateSyncPath(req.SourceType, req.AccountId, baseCid, localPath, remotePath, req.EnableCron, req.CustomConfig, req.SyncPathSetting)
+	syncPath := models.CreateSyncPath(req.SourceType, req.AccountId, baseCid, localPath, remotePath, req.EnableCron, req.CustomConfig, req.SettingStrm)
 	if syncPath == nil {
 		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "创建同步路径失败", Data: nil})
 		return
@@ -299,7 +300,7 @@ func UpdateSyncPath(c *gin.Context) {
 		req.RemotePath = strings.ReplaceAll(req.RemotePath, "\\", "/")
 		req.BaseCid = strings.ReplaceAll(req.BaseCid, "\\", "/")
 	}
-	success := syncPath.Update(req.SourceType, req.AccountId, req.BaseCid, req.LocalPath, remotePath, req.EnableCron, req.CustomConfig, req.SyncPathSetting)
+	success := syncPath.Update(req.SourceType, req.AccountId, req.BaseCid, req.LocalPath, remotePath, req.EnableCron, req.CustomConfig, req.SettingStrm)
 	if !success {
 		c.JSON(http.StatusOK, APIResponse[any]{Code: BadRequest, Message: "更新同步路径失败", Data: nil})
 		return

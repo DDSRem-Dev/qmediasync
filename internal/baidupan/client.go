@@ -320,22 +320,22 @@ func (c *Client) PreCreate(ctx context.Context, localPath string, remotePath str
 }
 
 // 上传文件
-func (c *Client) Upload(ctx context.Context, localPath string, remotePath string) error {
+func (c *Client) Upload(ctx context.Context, localPath string, remotePath string) (*openapiclient.Filecreateresponse, error) {
 	// 预上传
 	preResp, chunkMD5, err := c.PreCreate(ctx, localPath, remotePath)
 	if err != nil {
-		return fmt.Errorf("预上传失败：%w", err)
+		return nil, fmt.Errorf("预上传失败：%w", err)
 	}
 	for _, seqNum := range *preResp.BlockList {
 		// 提取文件分片
 		tempFilePath, err := helpers.ExtractFileChunkToTemp(localPath, chunkMD5.ChunkSize, seqNum)
 		if err != nil {
-			return fmt.Errorf("提取文件分片 %d 失败: %w", seqNum, err)
+			return nil, fmt.Errorf("提取文件分片 %d 失败: %w", seqNum, err)
 		}
 		file, err := os.Open(tempFilePath)
 		if err != nil {
 			os.Remove(tempFilePath)
-			return fmt.Errorf("打开临时文件失败: %w", err)
+			return nil, fmt.Errorf("打开临时文件失败: %w", err)
 		}
 		// 上传分片
 		uresp, ur, uerr := c.client.FileuploadApi.Pcssuperfile2(context.Background()).AccessToken(c.accessToken).Partseq(fmt.Sprintf("%d", seqNum)).Path(remotePath).Uploadid(*preResp.Uploadid).Type_("tmpfile").File(file).Execute()
@@ -343,7 +343,7 @@ func (c *Client) Upload(ctx context.Context, localPath string, remotePath string
 			// 关闭且删除分片
 			file.Close()
 			os.Remove(tempFilePath)
-			return fmt.Errorf("上传文件分片 %d 失败: %w", seqNum, uerr)
+			return nil, fmt.Errorf("上传文件分片 %d 失败: %w", seqNum, uerr)
 		}
 		// 关闭且删除分片
 		file.Close()
@@ -353,7 +353,7 @@ func (c *Client) Upload(ctx context.Context, localPath string, remotePath string
 	resp, r, err := c.client.FileuploadApi.Xpanfilecreate(ctx).AccessToken(c.accessToken).Path(remotePath).Isdir(0).Size(int32(chunkMD5.FileSize)).Uploadid(*preResp.Uploadid).BlockList(chunkMD5.ChunkMD5sJsonStr).Rtype(2).Execute()
 	// 统一处理错误
 	if c.handleError(err, r, resp) != nil {
-		return fmt.Errorf("创建文件失败：%w", err)
+		return nil, fmt.Errorf("创建文件失败：%w", err)
 	}
-	return nil
+	return &resp, nil
 }

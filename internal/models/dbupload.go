@@ -192,8 +192,6 @@ func (task *DbUploadTask) Upload115File() bool {
 
 	if existsErr == nil && detail.FileId != "" {
 		if task.Source == UploadSourceStrm {
-			// 标记为已完成
-			task.Complete()
 			return true
 		}
 		if task.Source == UploadSourceScrape {
@@ -204,8 +202,6 @@ func (task *DbUploadTask) Upload115File() bool {
 				task.Fail(fmt.Errorf("同步文件 %d 不存在", task.SyncFileId))
 				return false
 			}
-			// 标记为已完成
-			task.Complete()
 			helpers.AppLogger.Infof("回调刮削整理：刮削文件 %d 上传成功, 文件ID: %s", task.ScrapeMediaFileId, task.RemoteFileId)
 			scrapeMediaFile.RemoveTmpFiles(task)
 			return true
@@ -232,33 +228,26 @@ func (task *DbUploadTask) Upload115File() bool {
 		task.Fail(fmt.Errorf("115上传文件 %s 失败: 返回空文件ID", task.FileName))
 		return false
 	}
-	// 标记为已完成
-	task.Complete()
 	helpers.AppLogger.Infof("115上传文件 %s 成功, 新的文件ID: %s", task.LocalFullPath, fileId)
-	// if task.Source == UploadSourceStrm {
-	// 	// 查询文件详情，然后更新数据库
-	// 	detail, err = client.GetFsDetailByCid(context.Background(), fileId)
-	// 	if err != nil {
-	// 		task.Fail(fmt.Errorf("115查询文件详情 %s 失败: %s", fileId, err.Error()))
-	// 		return false
-	// 	}
-	// 	if detail.FileId == "" {
-	// 		task.Fail(fmt.Errorf("115查询文件详情 %s 失败: 返回空文件ID", fileId))
-	// 		return false
-	// 	}
-	// 	if file != nil {
-	// 		// 更新数据库
-	// 		file.PickCode = detail.PickCode
-	// 		file.Sha1 = detail.Sha1
-	// 		file.FileId = detail.FileId
-	// 		file.Path = detail.Path
-	// 		if len(detail.Paths) > 0 {
-	// 			file.ParentId = detail.Paths[len(detail.Paths)-1].FileId
-	// 		}
-	// 		file.Save()
-	// 	}
-	// 	return true
-	// }
+	if task.Source == UploadSourceStrm {
+		// 查询文件详情，然后更新本地文件的修改时间
+		detail, err = client.GetFsDetailByCid(context.Background(), fileId)
+		if err != nil {
+			task.Fail(fmt.Errorf("115查询文件详情 %s 失败: %s", fileId, err.Error()))
+			return false
+		}
+		if detail.FileId == "" {
+			task.Fail(fmt.Errorf("115查询文件详情 %s 失败: 返回空文件ID", fileId))
+			return false
+		}
+		mtime := helpers.StringToInt64(detail.Ptime)
+		// 更新本地文件的修改时间
+		err = os.Chtimes(task.LocalFullPath, time.Unix(mtime, 0), time.Unix(mtime, 0))
+		if err != nil {
+			task.Fail(fmt.Errorf("更新本地文件 %s 修改时间失败: %v", task.LocalFullPath, err))
+			return false
+		}
+	}
 	return true
 }
 
@@ -278,13 +267,20 @@ func (task *DbUploadTask) UploadBaiduPanFile() bool {
 	}
 	task.Uploading()
 	// 调用上传方法
-	err := client.Upload(context.Background(), task.LocalFullPath, task.RemoteFileId)
+	resp, err := client.Upload(context.Background(), task.LocalFullPath, task.RemoteFileId)
 	if err != nil {
 		task.Fail(fmt.Errorf("百度网盘上传文件 %s 失败: %v", task.FileName, err))
 		return false
 	}
-	// 标记为已完成
-	task.Complete()
+	if task.Source == UploadSourceStrm {
+		t := time.Unix(int64(*resp.Mtime), 0)
+		// 更新本地文件的修改时间
+		err = os.Chtimes(task.LocalFullPath, t, t)
+		if err != nil {
+			task.Fail(fmt.Errorf("更新本地文件 %s 修改时间失败: %v", task.LocalFullPath, err))
+			return false
+		}
+	}
 	return true
 }
 
@@ -301,18 +297,31 @@ func (task *DbUploadTask) UploadOpenListFile() bool {
 		task.Fail(fmt.Errorf("账户 %s OpenList客户端不存在", account.Name))
 		return false
 	}
-	// if task.Source == UploadSourceStrm {
-	// 	file := GetSyncFileById(task.SyncFileId)
-	// 	if file == nil {
-	// 		task.Fail(fmt.Errorf("同步文件 %d 不存在", task.SyncFileId))
-	// 		return false
-	// 	}
-	// }
 	task.Uploading()
 	_, err := client.Upload(task.LocalFullPath, task.RemoteFileId)
 	if err != nil {
 		task.Fail(fmt.Errorf("OpenList上传文件 %s 失败: %v", task.FileName, err))
 		return false
+	}
+	if task.Source == UploadSourceStrm {
+		// 查询文件详情
+		detail, err := client.FileDetail(task.RemoteFileId)
+		if err != nil {
+			task.Fail(fmt.Errorf("OpenList查询文件详情 %s 失败: %s", task.RemoteFileId, err.Error()))
+			return false
+		}
+		// 将ISO 8601格式的日期字符串转换为时间戳
+		t, err := time.Parse(time.RFC3339, detail.Modified)
+		if err != nil {
+			helpers.AppLogger.Warnf("解析时间格式失败: %v, 时间字符串: %s", err, detail.Modified)
+			return true
+		}
+		// 更新本地文件的修改时间
+		err = os.Chtimes(task.LocalFullPath, t, t)
+		if err != nil {
+			task.Fail(fmt.Errorf("更新本地文件 %s 修改时间失败: %v", task.LocalFullPath, err))
+			return false
+		}
 	}
 	return true
 }

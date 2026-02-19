@@ -17,6 +17,7 @@ import (
 )
 
 var GlobalCron *cron.Cron
+var SyncCron *cron.Cron
 
 func StartSyncCron() {
 	// 查询所有同步目录
@@ -26,12 +27,14 @@ func StartSyncCron() {
 		return
 	}
 	for _, syncPath := range syncPaths {
+		// 没开启定时任务或者自定义CRON表达式的同步目录跳过
+		if !syncPath.EnableCron || syncPath.SettingStrm.Cron != "" {
+			continue
+		}
 		// 将同步目录ID添加到处理队列，而不是直接执行
 		if err := AddNewSyncTask(syncPath.ID, SyncTaskTypeStrm); err != nil {
-			// helpers.AppLogger.Errorf("将同步任务添加到队列失败: %s", err.Error())
+			helpers.AppLogger.Errorf("将同步任务添加到队列失败: %s", err.Error())
 			continue
-		} else {
-			// helpers.AppLogger.Infof("创建同步任务成功并已添加到执行队列，同步目录ID: %d，同步目录:%s", syncPath.ID, syncPath.RemotePath)
 		}
 	}
 }
@@ -246,7 +249,56 @@ func InitCron() {
 			helpers.AppLogger.Infof("已清理24小时前的请求统计数据")
 		}
 	})
-	// 添加备份定时任务和超时检查
-	// StartBackupCron()
+
+	addBackupCron()
+
 	GlobalCron.Start()
+}
+
+// 初始化STRM同步目录的定时任务
+func InitSyncCron() {
+	if SyncCron != nil {
+		SyncCron.Stop()
+	}
+	SyncCron = cron.New()
+	// 查询所有同步目录
+	syncPaths, _ := models.GetSyncPathList(1, 10000000, true)
+	if len(syncPaths) == 0 {
+		return
+	}
+	for _, syncPath := range syncPaths {
+		if syncPath.Cron == "" || !syncPath.EnableCron {
+			continue
+		}
+		SyncCron.AddFunc(syncPath.Cron, func() {
+			// 将同步目录ID添加到处理队列，而不是直接执行
+			if err := AddNewSyncTask(syncPath.ID, SyncTaskTypeStrm); err != nil {
+				helpers.AppLogger.Errorf("将同步任务添加到队列失败: %s", err.Error())
+				return
+			}
+		})
+	}
+}
+
+func addBackupCron() {
+	backupConfig := models.GetOrCreateBackupConfig()
+	if backupConfig.BackupEnabled == 0 || backupConfig.BackupCron == "" {
+		return
+	}
+	_, err := GlobalCron.AddFunc(backupConfig.BackupCron, func() {
+		service := models.GetBackupService()
+		if service.IsRunning() {
+			helpers.AppLogger.Info("备份任务正在运行，跳过本次自动备份")
+			return
+		}
+
+		helpers.AppLogger.Info("开始执行定时自动备份")
+		service.CreateBackup(context.Background(), models.BackupTypeAuto, "定时自动备份")
+	})
+
+	if err != nil {
+		helpers.AppLogger.Errorf("添加备份定时任务失败: %v", err)
+	} else {
+		helpers.AppLogger.Infof("已添加自动备份定时任务，cron表达式: %s", backupConfig.BackupCron)
+	}
 }
