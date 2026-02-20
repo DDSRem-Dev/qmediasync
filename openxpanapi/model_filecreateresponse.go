@@ -16,18 +16,18 @@ import (
 
 // Filecreateresponse struct for Filecreateresponse
 type Filecreateresponse struct {
-	Category *int32 `json:"category,omitempty"`
-	Ctime *int32 `json:"ctime,omitempty"`
-	FromType *int32 `json:"from_type,omitempty"`
-	FsId *int64 `json:"fs_id,omitempty"`
-	Isdir *int32 `json:"isdir,omitempty"`
-	Md5 *string `json:"md5,omitempty"`
-	Mtime *int32 `json:"mtime,omitempty"`
-	Path *string `json:"path,omitempty"`
+	Category       *int32  `json:"category,omitempty"`
+	Ctime          *int32  `json:"ctime,omitempty"`
+	FromType       *int32  `json:"from_type,omitempty"`
+	FsId           *int64  `json:"fs_id,omitempty"`
+	Isdir          *int32  `json:"isdir,omitempty"`
+	Md5            *string `json:"md5,omitempty"`
+	Mtime          *int32  `json:"mtime,omitempty"`
+	Path           *string `json:"path,omitempty"`
 	ServerFilename *string `json:"server_filename,omitempty"`
-	Size *int32 `json:"size,omitempty"`
-	Errno *int32 `json:"errno,omitempty"`
-	Name *string `json:"name,omitempty"`
+	Size           *int32  `json:"size,omitempty"`
+	Errno          *int32  `json:"errno,omitempty"`
+	Name           *string `json:"name,omitempty"`
 }
 
 // NewFilecreateresponse instantiates a new Filecreateresponse object
@@ -507,5 +507,3 @@ func (v *NullableFilecreateresponse) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }
-
-

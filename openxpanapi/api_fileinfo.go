@@ -27,16 +27,16 @@ var (
 type FileinfoApiService service
 
 type ApiXpanfiledoclistRequest struct {
-	ctx _context.Context
-	ApiService *FileinfoApiService
+	ctx         _context.Context
+	ApiService  *FileinfoApiService
 	accessToken *string
-	parentPath *string
-	recursion *string
-	page *int32
-	num *int32
-	order *string
-	desc *string
-	web *string
+	parentPath  *string
+	recursion   *string
+	page        *int32
+	num         *int32
+	order       *string
+	desc        *string
+	web         *string
 }
 
 func (r ApiXpanfiledoclistRequest) AccessToken(accessToken string) ApiXpanfiledoclistRequest {
@@ -87,7 +87,7 @@ file doclist
 func (a *FileinfoApiService) Xpanfiledoclist(ctx _context.Context) ApiXpanfiledoclistRequest {
 	return ApiXpanfiledoclistRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
@@ -95,10 +95,10 @@ func (a *FileinfoApiService) Xpanfiledoclist(ctx _context.Context) ApiXpanfiledo
 //  @return string
 func (a *FileinfoApiService) XpanfiledoclistExecute(r ApiXpanfiledoclistRequest) (string, *_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodGet
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  string
+		localVarHTTPMethod  = _nethttp.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue string
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "FileinfoApiService.Xpanfiledoclist")
@@ -192,16 +192,16 @@ func (a *FileinfoApiService) XpanfiledoclistExecute(r ApiXpanfiledoclistRequest)
 }
 
 type ApiXpanfileimagelistRequest struct {
-	ctx _context.Context
-	ApiService *FileinfoApiService
+	ctx         _context.Context
+	ApiService  *FileinfoApiService
 	accessToken *string
-	parentPath *string
-	recursion *string
-	page *int32
-	num *int32
-	order *string
-	desc *string
-	web *string
+	parentPath  *string
+	recursion   *string
+	page        *int32
+	num         *int32
+	order       *string
+	desc        *string
+	web         *string
 }
 
 func (r ApiXpanfileimagelistRequest) AccessToken(accessToken string) ApiXpanfileimagelistRequest {
@@ -252,7 +252,7 @@ file imagelist
 func (a *FileinfoApiService) Xpanfileimagelist(ctx _context.Context) ApiXpanfileimagelistRequest {
 	return ApiXpanfileimagelistRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
@@ -260,10 +260,10 @@ func (a *FileinfoApiService) Xpanfileimagelist(ctx _context.Context) ApiXpanfile
 //  @return string
 func (a *FileinfoApiService) XpanfileimagelistExecute(r ApiXpanfileimagelistRequest) (string, *_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodGet
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  string
+		localVarHTTPMethod  = _nethttp.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue string
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "FileinfoApiService.Xpanfileimagelist")
@@ -357,17 +357,17 @@ func (a *FileinfoApiService) XpanfileimagelistExecute(r ApiXpanfileimagelistRequ
 }
 
 type ApiXpanfilelistRequest struct {
-	ctx _context.Context
-	ApiService *FileinfoApiService
+	ctx         _context.Context
+	ApiService  *FileinfoApiService
 	accessToken *string
-	dir *string
-	folder *string
-	start *string
-	limit *int32
-	order *string
-	desc *int32
-	web *string
-	showempty *int32
+	dir         *string
+	folder      *string
+	start       *string
+	limit       *int32
+	order       *string
+	desc        *int32
+	web         *string
+	showempty   *int32
 }
 
 func (r ApiXpanfilelistRequest) AccessToken(accessToken string) ApiXpanfilelistRequest {
@@ -422,7 +422,7 @@ file list
 func (a *FileinfoApiService) Xpanfilelist(ctx _context.Context) ApiXpanfilelistRequest {
 	return ApiXpanfilelistRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
@@ -430,10 +430,10 @@ func (a *FileinfoApiService) Xpanfilelist(ctx _context.Context) ApiXpanfilelistR
 //  @return string
 func (a *FileinfoApiService) XpanfilelistExecute(r ApiXpanfilelistRequest) (string, *_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodGet
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  string
+		localVarHTTPMethod  = _nethttp.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue string
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "FileinfoApiService.Xpanfilelist")
@@ -530,15 +530,15 @@ func (a *FileinfoApiService) XpanfilelistExecute(r ApiXpanfilelistRequest) (stri
 }
 
 type ApiXpanfilesearchRequest struct {
-	ctx _context.Context
-	ApiService *FileinfoApiService
+	ctx         _context.Context
+	ApiService  *FileinfoApiService
 	accessToken *string
-	key *string
-	web *string
-	num *string
-	page *string
-	dir *string
-	recursion *string
+	key         *string
+	web         *string
+	num         *string
+	page        *string
+	dir         *string
+	recursion   *string
 }
 
 func (r ApiXpanfilesearchRequest) AccessToken(accessToken string) ApiXpanfilesearchRequest {
@@ -585,7 +585,7 @@ file search
 func (a *FileinfoApiService) Xpanfilesearch(ctx _context.Context) ApiXpanfilesearchRequest {
 	return ApiXpanfilesearchRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
@@ -593,10 +593,10 @@ func (a *FileinfoApiService) Xpanfilesearch(ctx _context.Context) ApiXpanfilesea
 //  @return string
 func (a *FileinfoApiService) XpanfilesearchExecute(r ApiXpanfilesearchRequest) (string, *_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodGet
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  string
+		localVarHTTPMethod  = _nethttp.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue string
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "FileinfoApiService.Xpanfilesearch")

@@ -27,28 +27,31 @@ var (
 type FilemanagerApiService service
 
 type ApiFilemanagercopyRequest struct {
-	ctx _context.Context
-	ApiService *FilemanagerApiService
+	ctx         _context.Context
+	ApiService  *FilemanagerApiService
 	accessToken *string
-	async *int32
-	filelist *string
-	ondup *string
+	async       *int32
+	filelist    *string
+	ondup       *string
 }
 
 func (r ApiFilemanagercopyRequest) AccessToken(accessToken string) ApiFilemanagercopyRequest {
 	r.accessToken = &accessToken
 	return r
 }
+
 // async
 func (r ApiFilemanagercopyRequest) Async(async int32) ApiFilemanagercopyRequest {
 	r.async = &async
 	return r
 }
+
 // filelist
 func (r ApiFilemanagercopyRequest) Filelist(filelist string) ApiFilemanagercopyRequest {
 	r.filelist = &filelist
 	return r
 }
+
 // ondup
 func (r ApiFilemanagercopyRequest) Ondup(ondup string) ApiFilemanagercopyRequest {
 	r.ondup = &ondup
@@ -70,16 +73,16 @@ filemanager copy
 func (a *FilemanagerApiService) Filemanagercopy(ctx _context.Context) ApiFilemanagercopyRequest {
 	return ApiFilemanagercopyRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
 // Execute executes the request
 func (a *FilemanagerApiService) FilemanagercopyExecute(r ApiFilemanagercopyRequest) (*_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodPost
-		localVarPostBody     interface{}
-		formFiles            []formFile
+		localVarHTTPMethod = _nethttp.MethodPost
+		localVarPostBody   interface{}
+		formFiles          []formFile
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "FilemanagerApiService.Filemanagercopy")
@@ -154,28 +157,31 @@ func (a *FilemanagerApiService) FilemanagercopyExecute(r ApiFilemanagercopyReque
 }
 
 type ApiFilemanagerdeleteRequest struct {
-	ctx _context.Context
-	ApiService *FilemanagerApiService
+	ctx         _context.Context
+	ApiService  *FilemanagerApiService
 	accessToken *string
-	async *int32
-	filelist *string
-	ondup *string
+	async       *int32
+	filelist    *string
+	ondup       *string
 }
 
 func (r ApiFilemanagerdeleteRequest) AccessToken(accessToken string) ApiFilemanagerdeleteRequest {
 	r.accessToken = &accessToken
 	return r
 }
+
 // async
 func (r ApiFilemanagerdeleteRequest) Async(async int32) ApiFilemanagerdeleteRequest {
 	r.async = &async
 	return r
 }
+
 // filelist
 func (r ApiFilemanagerdeleteRequest) Filelist(filelist string) ApiFilemanagerdeleteRequest {
 	r.filelist = &filelist
 	return r
 }
+
 // ondup
 func (r ApiFilemanagerdeleteRequest) Ondup(ondup string) ApiFilemanagerdeleteRequest {
 	r.ondup = &ondup
@@ -197,16 +203,16 @@ filemanager delete
 func (a *FilemanagerApiService) Filemanagerdelete(ctx _context.Context) ApiFilemanagerdeleteRequest {
 	return ApiFilemanagerdeleteRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
 // Execute executes the request
 func (a *FilemanagerApiService) FilemanagerdeleteExecute(r ApiFilemanagerdeleteRequest) (*_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodPost
-		localVarPostBody     interface{}
-		formFiles            []formFile
+		localVarHTTPMethod = _nethttp.MethodPost
+		localVarPostBody   interface{}
+		formFiles          []formFile
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "FilemanagerApiService.Filemanagerdelete")
@@ -281,28 +287,31 @@ func (a *FilemanagerApiService) FilemanagerdeleteExecute(r ApiFilemanagerdeleteR
 }
 
 type ApiFilemanagermoveRequest struct {
-	ctx _context.Context
-	ApiService *FilemanagerApiService
+	ctx         _context.Context
+	ApiService  *FilemanagerApiService
 	accessToken *string
-	async *int32
-	filelist *string
-	ondup *string
+	async       *int32
+	filelist    *string
+	ondup       *string
 }
 
 func (r ApiFilemanagermoveRequest) AccessToken(accessToken string) ApiFilemanagermoveRequest {
 	r.accessToken = &accessToken
 	return r
 }
+
 // async
 func (r ApiFilemanagermoveRequest) Async(async int32) ApiFilemanagermoveRequest {
 	r.async = &async
 	return r
 }
+
 // filelist
 func (r ApiFilemanagermoveRequest) Filelist(filelist string) ApiFilemanagermoveRequest {
 	r.filelist = &filelist
 	return r
 }
+
 // ondup
 func (r ApiFilemanagermoveRequest) Ondup(ondup string) ApiFilemanagermoveRequest {
 	r.ondup = &ondup
@@ -324,16 +333,16 @@ filemanager move
 func (a *FilemanagerApiService) Filemanagermove(ctx _context.Context) ApiFilemanagermoveRequest {
 	return ApiFilemanagermoveRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
 // Execute executes the request
 func (a *FilemanagerApiService) FilemanagermoveExecute(r ApiFilemanagermoveRequest) (*_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodPost
-		localVarPostBody     interface{}
-		formFiles            []formFile
+		localVarHTTPMethod = _nethttp.MethodPost
+		localVarPostBody   interface{}
+		formFiles          []formFile
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "FilemanagerApiService.Filemanagermove")
@@ -408,28 +417,31 @@ func (a *FilemanagerApiService) FilemanagermoveExecute(r ApiFilemanagermoveReque
 }
 
 type ApiFilemanagerrenameRequest struct {
-	ctx _context.Context
-	ApiService *FilemanagerApiService
+	ctx         _context.Context
+	ApiService  *FilemanagerApiService
 	accessToken *string
-	async *int32
-	filelist *string
-	ondup *string
+	async       *int32
+	filelist    *string
+	ondup       *string
 }
 
 func (r ApiFilemanagerrenameRequest) AccessToken(accessToken string) ApiFilemanagerrenameRequest {
 	r.accessToken = &accessToken
 	return r
 }
+
 // async
 func (r ApiFilemanagerrenameRequest) Async(async int32) ApiFilemanagerrenameRequest {
 	r.async = &async
 	return r
 }
+
 // filelist
 func (r ApiFilemanagerrenameRequest) Filelist(filelist string) ApiFilemanagerrenameRequest {
 	r.filelist = &filelist
 	return r
 }
+
 // ondup
 func (r ApiFilemanagerrenameRequest) Ondup(ondup string) ApiFilemanagerrenameRequest {
 	r.ondup = &ondup
@@ -451,16 +463,16 @@ filemanager rename
 func (a *FilemanagerApiService) Filemanagerrename(ctx _context.Context) ApiFilemanagerrenameRequest {
 	return ApiFilemanagerrenameRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
 // Execute executes the request
 func (a *FilemanagerApiService) FilemanagerrenameExecute(r ApiFilemanagerrenameRequest) (*_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodPost
-		localVarPostBody     interface{}
-		formFiles            []formFile
+		localVarHTTPMethod = _nethttp.MethodPost
+		localVarPostBody   interface{}
+		formFiles          []formFile
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "FilemanagerApiService.Filemanagerrename")

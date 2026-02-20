@@ -16,12 +16,12 @@ import (
 
 // OauthTokenAuthorizationCodeResponse struct for OauthTokenAuthorizationCodeResponse
 type OauthTokenAuthorizationCodeResponse struct {
-	ExpiresIn *int32 `json:"expires_in,omitempty"`
-	RefreshToken *string `json:"refresh_token,omitempty"`
-	AccessToken *string `json:"access_token,omitempty"`
+	ExpiresIn     *int32  `json:"expires_in,omitempty"`
+	RefreshToken  *string `json:"refresh_token,omitempty"`
+	AccessToken   *string `json:"access_token,omitempty"`
 	SessionSecret *string `json:"session_secret,omitempty"`
-	SessionKey *string `json:"session_key,omitempty"`
-	Scope *string `json:"scope,omitempty"`
+	SessionKey    *string `json:"session_key,omitempty"`
+	Scope         *string `json:"scope,omitempty"`
 }
 
 // NewOauthTokenAuthorizationCodeResponse instantiates a new OauthTokenAuthorizationCodeResponse object
@@ -291,5 +291,3 @@ func (v *NullableOauthTokenAuthorizationCodeResponse) UnmarshalJSON(src []byte) 
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }
-
-

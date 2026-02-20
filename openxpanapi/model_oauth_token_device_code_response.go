@@ -16,12 +16,12 @@ import (
 
 // OauthTokenDeviceCodeResponse struct for OauthTokenDeviceCodeResponse
 type OauthTokenDeviceCodeResponse struct {
-	DeviceCode *string `json:"device_code,omitempty"`
-	UserCode *string `json:"user_code,omitempty"`
+	DeviceCode      *string `json:"device_code,omitempty"`
+	UserCode        *string `json:"user_code,omitempty"`
 	VerificationUrl *string `json:"verification_url,omitempty"`
-	QrcodeUrl *string `json:"qrcode_url,omitempty"`
-	ExpiresIn *int32 `json:"expires_in,omitempty"`
-	Interval *int32 `json:"interval,omitempty"`
+	QrcodeUrl       *string `json:"qrcode_url,omitempty"`
+	ExpiresIn       *int32  `json:"expires_in,omitempty"`
+	Interval        *int32  `json:"interval,omitempty"`
 }
 
 // NewOauthTokenDeviceCodeResponse instantiates a new OauthTokenDeviceCodeResponse object
@@ -291,5 +291,3 @@ func (v *NullableOauthTokenDeviceCodeResponse) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }
-
-

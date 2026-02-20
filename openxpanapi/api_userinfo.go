@@ -27,11 +27,11 @@ var (
 type UserinfoApiService service
 
 type ApiApiquotaRequest struct {
-	ctx _context.Context
-	ApiService *UserinfoApiService
+	ctx         _context.Context
+	ApiService  *UserinfoApiService
 	accessToken *string
 	checkexpire *int32
-	checkfree *int32
+	checkfree   *int32
 }
 
 func (r ApiApiquotaRequest) AccessToken(accessToken string) ApiApiquotaRequest {
@@ -62,7 +62,7 @@ api quota
 func (a *UserinfoApiService) Apiquota(ctx _context.Context) ApiApiquotaRequest {
 	return ApiApiquotaRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
@@ -70,10 +70,10 @@ func (a *UserinfoApiService) Apiquota(ctx _context.Context) ApiApiquotaRequest {
 //  @return Quotaresponse
 func (a *UserinfoApiService) ApiquotaExecute(r ApiApiquotaRequest) (Quotaresponse, *_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodGet
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  Quotaresponse
+		localVarHTTPMethod  = _nethttp.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue Quotaresponse
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "UserinfoApiService.Apiquota")
@@ -152,8 +152,8 @@ func (a *UserinfoApiService) ApiquotaExecute(r ApiApiquotaRequest) (Quotarespons
 }
 
 type ApiXpannasuinfoRequest struct {
-	ctx _context.Context
-	ApiService *UserinfoApiService
+	ctx         _context.Context
+	ApiService  *UserinfoApiService
 	accessToken *string
 }
 
@@ -177,7 +177,7 @@ user info
 func (a *UserinfoApiService) Xpannasuinfo(ctx _context.Context) ApiXpannasuinfoRequest {
 	return ApiXpannasuinfoRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
@@ -185,10 +185,10 @@ func (a *UserinfoApiService) Xpannasuinfo(ctx _context.Context) ApiXpannasuinfoR
 //  @return Uinforesponse
 func (a *UserinfoApiService) XpannasuinfoExecute(r ApiXpannasuinfoRequest) (Uinforesponse, *_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodGet
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  Uinforesponse
+		localVarHTTPMethod  = _nethttp.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue Uinforesponse
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "UserinfoApiService.Xpannasuinfo")

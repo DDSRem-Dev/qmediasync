@@ -77,9 +77,9 @@ type ServerVariable struct {
 
 // ServerConfiguration stores the information about a server
 type ServerConfiguration struct {
-	URL string
+	URL         string
 	Description string
-	Variables map[string]ServerVariable
+	Variables   map[string]ServerVariable
 }
 
 // ServerConfigurations stores multiple ServerConfiguration items
@@ -100,135 +100,135 @@ type Configuration struct {
 // NewConfiguration returns a new Configuration object
 func NewConfiguration() *Configuration {
 	cfg := &Configuration{
-		DefaultHeader:    make(map[string]string),
-		UserAgent:        "OpenAPI-Generator/1.0.0/go",
-		Debug:            false,
-		Servers:          ServerConfigurations{
+		DefaultHeader: make(map[string]string),
+		UserAgent:     "OpenAPI-Generator/1.0.0/go",
+		Debug:         false,
+		Servers: ServerConfigurations{
 			{
-				URL: "https://d.pcs.baidu.com",
+				URL:         "https://d.pcs.baidu.com",
 				Description: "No description provided",
 			},
 			{
-				URL: "https://pan.baidu.com",
+				URL:         "https://pan.baidu.com",
 				Description: "No description provided",
 			},
 			{
-				URL: "https://openapi.baidu.com",
+				URL:         "https://openapi.baidu.com",
 				Description: "No description provided",
 			},
 		},
 		OperationServers: map[string]ServerConfigurations{
 			"AuthApiService.OauthTokenCode2token": {
 				{
-					URL: "https://openapi.baidu.com",
+					URL:         "https://openapi.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"AuthApiService.OauthTokenDeviceCode": {
 				{
-					URL: "https://openapi.baidu.com",
+					URL:         "https://openapi.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"AuthApiService.OauthTokenDeviceToken": {
 				{
-					URL: "https://openapi.baidu.com",
+					URL:         "https://openapi.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"AuthApiService.OauthTokenRefreshToken": {
 				{
-					URL: "https://openapi.baidu.com",
+					URL:         "https://openapi.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FileinfoApiService.Xpanfiledoclist": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FileinfoApiService.Xpanfileimagelist": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FileinfoApiService.Xpanfilelist": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FileinfoApiService.Xpanfilesearch": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FilemanagerApiService.Filemanagercopy": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FilemanagerApiService.Filemanagerdelete": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FilemanagerApiService.Filemanagermove": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FilemanagerApiService.Filemanagerrename": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FileuploadApiService.Pcssuperfile2": {
 				{
-					URL: "https://d.pcs.baidu.com",
+					URL:         "https://d.pcs.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FileuploadApiService.Xpanfilecreate": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"FileuploadApiService.Xpanfileprecreate": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"MultimediafileApiService.Xpanfilelistall": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"MultimediafileApiService.Xpanmultimediafilemetas": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"UserinfoApiService.Apiquota": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},
 			"UserinfoApiService.Xpannasuinfo": {
 				{
-					URL: "https://pan.baidu.com",
+					URL:         "https://pan.baidu.com",
 					Description: "No description provided",
 				},
 			},

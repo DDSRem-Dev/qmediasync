@@ -27,12 +27,12 @@ var (
 type AuthApiService service
 
 type ApiOauthTokenCode2tokenRequest struct {
-	ctx _context.Context
-	ApiService *AuthApiService
-	code *string
-	clientId *string
+	ctx          _context.Context
+	ApiService   *AuthApiService
+	code         *string
+	clientId     *string
 	clientSecret *string
-	redirectUri *string
+	redirectUri  *string
 }
 
 func (r ApiOauthTokenCode2tokenRequest) Code(code string) ApiOauthTokenCode2tokenRequest {
@@ -67,7 +67,7 @@ get accesstoken by authorization code
 func (a *AuthApiService) OauthTokenCode2token(ctx _context.Context) ApiOauthTokenCode2tokenRequest {
 	return ApiOauthTokenCode2tokenRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
@@ -75,10 +75,10 @@ func (a *AuthApiService) OauthTokenCode2token(ctx _context.Context) ApiOauthToke
 //  @return OauthTokenAuthorizationCodeResponse
 func (a *AuthApiService) OauthTokenCode2tokenExecute(r ApiOauthTokenCode2tokenRequest) (OauthTokenAuthorizationCodeResponse, *_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodGet
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  OauthTokenAuthorizationCodeResponse
+		localVarHTTPMethod  = _nethttp.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue OauthTokenAuthorizationCodeResponse
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "AuthApiService.OauthTokenCode2token")
@@ -163,10 +163,10 @@ func (a *AuthApiService) OauthTokenCode2tokenExecute(r ApiOauthTokenCode2tokenRe
 }
 
 type ApiOauthTokenDeviceCodeRequest struct {
-	ctx _context.Context
+	ctx        _context.Context
 	ApiService *AuthApiService
-	clientId *string
-	scope *string
+	clientId   *string
+	scope      *string
 }
 
 func (r ApiOauthTokenDeviceCodeRequest) ClientId(clientId string) ApiOauthTokenDeviceCodeRequest {
@@ -193,7 +193,7 @@ get device code and user code
 func (a *AuthApiService) OauthTokenDeviceCode(ctx _context.Context) ApiOauthTokenDeviceCodeRequest {
 	return ApiOauthTokenDeviceCodeRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
@@ -201,10 +201,10 @@ func (a *AuthApiService) OauthTokenDeviceCode(ctx _context.Context) ApiOauthToke
 //  @return OauthTokenDeviceCodeResponse
 func (a *AuthApiService) OauthTokenDeviceCodeExecute(r ApiOauthTokenDeviceCodeRequest) (OauthTokenDeviceCodeResponse, *_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodGet
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  OauthTokenDeviceCodeResponse
+		localVarHTTPMethod  = _nethttp.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue OauthTokenDeviceCodeResponse
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "AuthApiService.OauthTokenDeviceCode")
@@ -281,10 +281,10 @@ func (a *AuthApiService) OauthTokenDeviceCodeExecute(r ApiOauthTokenDeviceCodeRe
 }
 
 type ApiOauthTokenDeviceTokenRequest struct {
-	ctx _context.Context
-	ApiService *AuthApiService
-	code *string
-	clientId *string
+	ctx          _context.Context
+	ApiService   *AuthApiService
+	code         *string
+	clientId     *string
 	clientSecret *string
 }
 
@@ -316,7 +316,7 @@ get access_token
 func (a *AuthApiService) OauthTokenDeviceToken(ctx _context.Context) ApiOauthTokenDeviceTokenRequest {
 	return ApiOauthTokenDeviceTokenRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
@@ -324,10 +324,10 @@ func (a *AuthApiService) OauthTokenDeviceToken(ctx _context.Context) ApiOauthTok
 //  @return OauthTokenDeviceTokenResponse
 func (a *AuthApiService) OauthTokenDeviceTokenExecute(r ApiOauthTokenDeviceTokenRequest) (OauthTokenDeviceTokenResponse, *_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodGet
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  OauthTokenDeviceTokenResponse
+		localVarHTTPMethod  = _nethttp.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue OauthTokenDeviceTokenResponse
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "AuthApiService.OauthTokenDeviceToken")
@@ -408,10 +408,10 @@ func (a *AuthApiService) OauthTokenDeviceTokenExecute(r ApiOauthTokenDeviceToken
 }
 
 type ApiOauthTokenRefreshTokenRequest struct {
-	ctx _context.Context
-	ApiService *AuthApiService
+	ctx          _context.Context
+	ApiService   *AuthApiService
 	refreshToken *string
-	clientId *string
+	clientId     *string
 	clientSecret *string
 }
 
@@ -443,7 +443,7 @@ authorization code
 func (a *AuthApiService) OauthTokenRefreshToken(ctx _context.Context) ApiOauthTokenRefreshTokenRequest {
 	return ApiOauthTokenRefreshTokenRequest{
 		ApiService: a,
-		ctx: ctx,
+		ctx:        ctx,
 	}
 }
 
@@ -451,10 +451,10 @@ func (a *AuthApiService) OauthTokenRefreshToken(ctx _context.Context) ApiOauthTo
 //  @return OauthTokenRefreshTokenResponse
 func (a *AuthApiService) OauthTokenRefreshTokenExecute(r ApiOauthTokenRefreshTokenRequest) (OauthTokenRefreshTokenResponse, *_nethttp.Response, error) {
 	var (
-		localVarHTTPMethod   = _nethttp.MethodGet
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  OauthTokenRefreshTokenResponse
+		localVarHTTPMethod  = _nethttp.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue OauthTokenRefreshTokenResponse
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "AuthApiService.OauthTokenRefreshToken")

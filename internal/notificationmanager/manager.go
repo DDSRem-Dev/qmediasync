@@ -85,6 +85,25 @@ func (m *EnhancedNotificationManager) LoadChannels() error {
 	return nil
 }
 
+// StartAll 启动所有支持后台运行的渠道处理器
+func (m *EnhancedNotificationManager) StartAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	helpers.AppLogger.Info("正在启动所有通知渠道监听器...")
+
+	count := 0
+	for _, info := range m.handlers {
+		if bg, ok := info.handler.(BackgroundHandler); ok {
+			// 将 main 传入的 ctx 传递给每一个 handler
+			bg.Start(context.Background())
+			count++
+		}
+	}
+
+	helpers.AppLogger.Infof("成功启动 %d 个后台监听器", count)
+}
+
 func (m *EnhancedNotificationManager) createChannelHandler(channel *notification.NotificationChannel) (ChannelHandler, error) {
 	switch channel.ChannelType {
 	case "telegram":
@@ -178,6 +197,13 @@ func (m *EnhancedNotificationManager) ReloadChannel(channelID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if oldInfo, exists := m.handlers[channelID]; exists {
+		if bg, ok := oldInfo.handler.(BackgroundHandler); ok {
+			helpers.AppLogger.Infof("停止旧的后台渠道: %d", channelID)
+			bg.Stop()
+		}
+	}
+
 	var channel notification.NotificationChannel
 	if err := m.db.Where("id = ?", channelID).First(&channel).Error; err != nil {
 		return fmt.Errorf("渠道不存在: %v", err)
@@ -198,6 +224,10 @@ func (m *EnhancedNotificationManager) ReloadChannel(channelID uint) error {
 		config:  &channel,
 	}
 
+	if bg, ok := handler.(BackgroundHandler); ok {
+		bg.Start(context.Background())
+	}
+
 	helpers.AppLogger.Infof("已重新加载渠道: %s", channel.ChannelName)
 	return nil
 }
@@ -212,4 +242,17 @@ func (m *EnhancedNotificationManager) GetChannels() []notification.NotificationC
 		channels = append(channels, *info.config)
 	}
 	return channels
+}
+
+// RegisterTelegramCommands 将自定义命令逻辑注入到所有 Telegram 渠道中
+func (m *EnhancedNotificationManager) RegisterTelegramCommands(cmds map[string]func([]string) string) {
+	m.mu.Lock() // 修改内部状态，加写锁
+	defer m.mu.Unlock()
+
+	for _, info := range m.handlers {
+		// 类型断言：检查这个 handler 是不是 TelegramChannelHandler
+		if tg, ok := info.handler.(*TelegramChannelHandler); ok {
+			tg.SetCommands(cmds)
+		}
+	}
 }

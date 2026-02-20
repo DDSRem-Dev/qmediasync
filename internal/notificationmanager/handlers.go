@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"Q115-STRM/internal/helpers"
@@ -22,10 +23,20 @@ type ChannelHandler interface {
 	IsHealthy() bool
 }
 
+// BackgroundHandler 如果渠道需要后台运行（如监听消息），则实现此接口
+type BackgroundHandler interface {
+	Start(ctx context.Context)
+	Stop()
+}
+
 // TelegramChannelHandler Telegram渠道处理器
 type TelegramChannelHandler struct {
-	config   *notification.TelegramChannelConfig
-	proxyURL string // 系统代理URL
+	config         *notification.TelegramChannelConfig
+	proxyURL       string // 系统代理URL
+	bot            *helpers.TelegramBot
+	initOnce       sync.Once
+	stopChan       chan struct{}                    // 用于停止信号
+	customCommands map[string]func([]string) string // 保存从外部注入的命令
 }
 
 func NewTelegramChannelHandler(config *notification.TelegramChannelConfig) *TelegramChannelHandler {
@@ -55,7 +66,6 @@ func (h *TelegramChannelHandler) IsHealthy() bool {
 
 func (h *TelegramChannelHandler) Send(ctx context.Context, notification *notification.Notification) error {
 	message := h.formatMessage(notification)
-
 	// 验证配置
 	if h.config == nil {
 		return fmt.Errorf("Telegram渠道配置为空")
@@ -83,7 +93,6 @@ func (h *TelegramChannelHandler) Send(ctx context.Context, notification *notific
 	if bot == nil {
 		return fmt.Errorf("创建Telegram机器人失败，请检查Token或ChatID是否有效")
 	}
-
 	// 如果有图片，先尝试发送图片（带标题作为caption）
 	if notification.Image != "" {
 		if perr := bot.SendPhoto(notification.Image, message); perr != nil {
@@ -117,6 +126,53 @@ func (h *TelegramChannelHandler) formatMessage(notification *notification.Notifi
 
 	// message += fmt.Sprintf("⏰ <b>时间:</b> %s", timestamp)
 	return message
+}
+
+// 内部初始化方法，确保只创建一个 bot 实例
+func (h *TelegramChannelHandler) initBot() error {
+	if h.bot != nil {
+		return nil
+	}
+	var err error
+	if h.proxyURL != "" {
+		h.bot, err = helpers.NewTelegramBotWithProxy(h.config.BotToken, h.config.ChatID, h.proxyURL)
+	} else {
+		h.bot = helpers.NewTelegramBot(h.config.BotToken, h.config.ChatID)
+	}
+	if h.bot == nil {
+		return fmt.Errorf("创建Telegram机器人失败")
+	}
+	h.bot.SetMenuContent()
+	return err
+}
+
+func (h *TelegramChannelHandler) SetCommands(cmds map[string]func([]string) string) {
+	h.customCommands = cmds
+}
+
+// Start 实现 BackgroundHandler 接口
+func (h *TelegramChannelHandler) Start(ctx context.Context) {
+	if err := h.initBot(); err != nil {
+		helpers.AppLogger.Errorf("初始化 Telegram Bot 失败: %v", err)
+		return
+	}
+
+	// 在协程中运行监听，避免阻塞主进程
+	go func() {
+		helpers.AppLogger.Infof("Telegram Bot 监听协程启动...")
+
+		// 调用你现有的监听逻辑，并把自定义命令传进去
+		// 注意：我们需要对 StartListening 做一点小改动，让它能感知 ctx
+		h.bot.StartListening(ctx, h.customCommands)
+
+		helpers.AppLogger.Infof("Telegram Bot 监听协程已安全退出")
+	}()
+}
+
+func (h *TelegramChannelHandler) Stop() {
+	if h.stopChan != nil {
+		close(h.stopChan)
+	}
 }
 
 // MeoWChannelHandler MeoW渠道处理器

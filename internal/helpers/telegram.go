@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -283,5 +284,140 @@ func TestTelegramBot(token, chatID, httpProxy string) error {
 			return fmt.Errorf("创建带代理的Telegram机器人失败: %v", err)
 		}
 		return bot.TestConnection()
+	}
+}
+func (bot *TelegramBot) StartListening(ctx context.Context, handleCommand map[string]func([]string) string) {
+	if bot.Client == nil {
+		AppLogger.Errorf("Bot Client 未初始化")
+		return
+	}
+
+	// 配置轮询参数
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	// 获取更新通道
+	updates := bot.Client.GetUpdatesChan(u)
+
+	AppLogger.Infof("Telegram Bot 控制监听已启动...")
+
+	// 监听 Context 取消信号 ---
+	go func() {
+		<-ctx.Done()
+		bot.Client.StopReceivingUpdates() // 这会导致 updates channel 被关闭，从而结束下面的 for 循环
+	}()
+
+	for update := range updates {
+		var cmd string
+		var args []string
+		var chatID int64
+
+		if update.Message != nil && update.Message.IsCommand() {
+			// 处理文字命令 /xxxx
+			cmd = update.Message.Command()
+			args = strings.Fields(update.Message.CommandArguments())
+			chatID = update.Message.Chat.ID
+		} else if update.CallbackQuery != nil {
+			// 处理按钮点击
+			bot.Client.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, ""))
+			cmd = update.CallbackQuery.Data
+			args = []string{}
+			chatID = update.CallbackQuery.Message.Chat.ID
+		} else {
+			continue
+		}
+
+		// --- 权限检查 ---
+		// 重点：只响应你在配置中指定的 ChatID，防止其他人控制你的程序
+		if bot.ChatID != "" && fmt.Sprintf("%d", chatID) != bot.ChatID {
+			continue
+		}
+
+		// --- 处理命令 ---
+		var responseText string
+		if logic, ok := handleCommand[cmd]; ok {
+			responseText = logic(args)
+		} else {
+			switch cmd {
+			case "start", "help":
+				responseText = `👋 <b>欢迎使用 QMediaSync Bot</b>  
+
+					📋 <b>命令列表：</b>  
+					📊/status - <b>查看系统运行状态</b>  
+					🚀/strm_sync - <b>执行全量 STRM 同步</b>  
+					🔄/strm_inc - <b>执行增量 STRM 同步</b>  
+					🎬/scrape - <b>执行刮削任务</b>  
+					🔄🎬/scrape_strm - <b>先刮削后同步</b>  
+					🎬🔄/strm_scrape - <b>先同步后刮削</b>
+					 
+					  
+					⚡ <b>同步模式说明：</b>  
+					• <b>全量模式：</b> "全量同步"操作会删除所有缓存数据（不会删除本地文件），然后执行同步，可以处理所有网盘文件变更  
+					• <b>增量模式：</b> "增量同步"仅会处理新增的文件，无法感知文件夹重命名等操作
+					
+					⚡ <b>同步/刮削命令：</b>  
+					• 不加任何参数执行默认对所有同步/刮削路径执行
+					• 可在命令后增加序号指定执行目录, 序号见同步/刮削目录设置。格式: /scrape #序号
+					
+					⚡ <b>任务序列命令：</b>  
+					• 格式: /scrape_strm #刮削目录序号 #同步目录序号
+					• 格式: /strm_scrape #同步目录序号 #刮削目录序号
+					• 若参数为 #0，则对所有目录执行任务
+					`
+			case "status":
+				responseText = "📊 <b>系统状态</b>\n运行中: OK\n时间: " + time.Now().Format("2006-01-02 15:04:05")
+			default:
+				responseText = "❓ 未知命令，输入 /help 查看帮助"
+			}
+		}
+
+		// 回复结果
+		if responseText != "" {
+			reply := tgbotapi.NewMessage(chatID, responseText)
+			reply.ParseMode = "HTML"
+			if cmd == "start" || cmd == "help" {
+				keyboard := tgbotapi.NewInlineKeyboardMarkup(
+					tgbotapi.NewInlineKeyboardRow(
+						tgbotapi.NewInlineKeyboardButtonData("📊 系统状态", "status"),
+						tgbotapi.NewInlineKeyboardButtonData("🚀 全量同步", "strm_sync"),
+						tgbotapi.NewInlineKeyboardButtonData("🔄 增量同步", "strm_inc"),
+					),
+					tgbotapi.NewInlineKeyboardRow(
+						tgbotapi.NewInlineKeyboardButtonData("🎬 刮削任务", "scrape"),
+						tgbotapi.NewInlineKeyboardButtonData("🎬🔄 刮削后同步", "scrape_strm"),
+						tgbotapi.NewInlineKeyboardButtonData("🔄🎬 同步后刮削", "strm_scrape"),
+					),
+				)
+				reply.ReplyMarkup = keyboard
+			}
+			bot.Client.Send(reply)
+		}
+
+	}
+}
+
+func (bot *TelegramBot) SetMenuContent() {
+	menu := map[string]string{
+		"status":      "📊 查看系统运行状态",
+		"strm_sync":   "🚀 执行 STRM 全量同步",
+		"strm_inc":    "🔄 执行 STRM 增量同步",
+		"scrape":      "🎬 执行刮削任务",
+		"scrape_strm": "🎬🔄 先刮削后同步",
+		"strm_scrape": "🔄🎬 先同步后刮削",
+		"help":        "📋 显示功能操作指南",
+	}
+
+	var tgCommands []tgbotapi.BotCommand
+	for cmd, desc := range menu {
+		tgCommands = append(tgCommands, tgbotapi.BotCommand{
+			Command:     cmd,
+			Description: desc,
+		})
+	}
+	scope := tgbotapi.NewBotCommandScopeAllPrivateChats()
+	cfg := tgbotapi.NewSetMyCommandsWithScope(scope, tgCommands...)
+	_, err := bot.Client.Request(cfg)
+	if err != nil {
+		AppLogger.Errorf("设置Bot菜单失败: %v", err)
 	}
 }

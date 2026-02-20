@@ -16,12 +16,12 @@ import (
 
 // Quotaresponse struct for Quotaresponse
 type Quotaresponse struct {
-	Errno *int32 `json:"errno,omitempty"`
-	Total *int64 `json:"total,omitempty"`
-	Free *int64 `json:"free,omitempty"`
+	Errno     *int32 `json:"errno,omitempty"`
+	Total     *int64 `json:"total,omitempty"`
+	Free      *int64 `json:"free,omitempty"`
 	RequestId *int64 `json:"request_id,omitempty"`
-	Expire *bool `json:"expire,omitempty"`
-	Used *int64 `json:"used,omitempty"`
+	Expire    *bool  `json:"expire,omitempty"`
+	Used      *int64 `json:"used,omitempty"`
 }
 
 // NewQuotaresponse instantiates a new Quotaresponse object
@@ -291,5 +291,3 @@ func (v *NullableQuotaresponse) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }
-
-
