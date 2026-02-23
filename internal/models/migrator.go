@@ -267,6 +267,8 @@ func Migrate() {
 		// 删除已存在的同步缓存表
 		db.Db.Exec("DROP TABLE IF EXISTS sync_files_cache")
 		migrator.UpdateVersionCode(db.Db)
+	}
+	if migrator.VersionCode == 17 {
 		migrator.UpdateVersionCode(db.Db) // 增加到18
 	}
 	if migrator.VersionCode == 18 {
@@ -329,6 +331,7 @@ func Migrate() {
 			BackupCompress:  1,
 			BackupCron:      "0 2 * * *",
 		})
+		migrator.UpdateVersionCode(db.Db)
 	}
 	if migrator.VersionCode == 25 {
 		db.Db.AutoMigrate(SyncPath{})

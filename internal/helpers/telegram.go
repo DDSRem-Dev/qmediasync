@@ -397,21 +397,27 @@ func (bot *TelegramBot) StartListening(ctx context.Context, handleCommand map[st
 }
 
 func (bot *TelegramBot) SetMenuContent() {
-	menu := map[string]string{
-		"status":      "📊 查看系统运行状态",
-		"strm_sync":   "🚀 执行 STRM 全量同步",
-		"strm_inc":    "🔄 执行 STRM 增量同步",
-		"scrape":      "🎬 执行刮削任务",
-		"scrape_strm": "🎬🔄 先刮削后同步",
-		"strm_scrape": "🔄🎬 先同步后刮削",
-		"help":        "📋 显示功能操作指南",
+	type menuItem struct {
+		Command     string
+		Description string
+	}
+
+	menu := []menuItem{
+
+		{"strm_sync", "🚀 执行 STRM 全量同步"},
+		{"strm_inc", "🔄 执行 STRM 增量同步"},
+		{"scrape", "🎬 执行刮削任务"},
+		{"scrape_strm", "🎬🔄 先刮削后同步"},
+		{"strm_scrape", "🔄🎬 先同步后刮削"},
+		{"help", "📋 显示功能操作指南"},
+		{"status", "📊 查看系统运行状态"},
 	}
 
 	var tgCommands []tgbotapi.BotCommand
-	for cmd, desc := range menu {
+	for _, item := range menu {
 		tgCommands = append(tgCommands, tgbotapi.BotCommand{
-			Command:     cmd,
-			Description: desc,
+			Command:     item.Command,
+			Description: item.Description,
 		})
 	}
 	scope := tgbotapi.NewBotCommandScopeAllPrivateChats()

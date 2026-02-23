@@ -106,12 +106,12 @@ func GetLocalPath(parentPath string) ([]DirResp, error) {
 		} else {
 			if helpers.IsFnOS {
 				// 如果是飞牛环境下，使用环境变量来获取有权限的目录
-				if helpers.AccessiblePathes == "" {
-					helpers.AccessiblePathes = os.Getenv("TRIM_DATA_ACCESSIBLE_PATHS")
-				}
-				if helpers.SharePathes == "" {
-					helpers.SharePathes = os.Getenv("TRIM_DATA_SHARE_PATHS")
-				}
+				// if helpers.AccessiblePathes == "" {
+				helpers.AccessiblePathes = os.Getenv("TRIM_DATA_ACCESSIBLE_PATHS")
+				// }
+				// if helpers.SharePathes == "" {
+				helpers.SharePathes = os.Getenv("TRIM_DATA_SHARE_PATHS")
+				// }
 				helpers.AppLogger.Infof("AccessiblePathes: %s", helpers.AccessiblePathes)
 				helpers.AppLogger.Infof("SharePathes: %s", helpers.SharePathes)
 				if helpers.AccessiblePathes != "" || helpers.SharePathes != "" {
@@ -126,7 +126,7 @@ func GetLocalPath(parentPath string) ([]DirResp, error) {
 						// 加入列表
 						pathes = append(pathes, DirResp{
 							Id:   path,
-							Name: filepath.Base(path),
+							Name: path,
 							Path: path,
 						})
 					}
