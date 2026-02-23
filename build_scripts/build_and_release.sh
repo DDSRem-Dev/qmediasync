@@ -171,6 +171,13 @@ for platform in "${PLATFORMS[@]}"; do
         cp "temp_build/$EXE_NAME" "temp_build/$ARCHIVE_NAME/"
         
         if [ -d "web_statics" ]; then
+            # 从assets目录复制db_config.html到web_statics目录
+            if [ -f "assets/db_config.html" ]; then
+                cp "assets/db_config.html" "web_statics/"
+                print_colored "green" "✓ Copied db_config.html from assets to web_statics"
+            else
+                print_colored "yellow" "Warning: assets/db_config.html not found"
+            fi
             cp -r "web_statics" "temp_build/$ARCHIVE_NAME/"
         fi
         
@@ -257,6 +264,13 @@ else
     fi
     
     if [ -d "web_statics" ]; then
+        # 从assets目录复制db_config.html到web_statics目录
+        if [ -f "assets/db_config.html" ]; then
+            cp "assets/db_config.html" "web_statics/"
+            print_colored "green" "✓ Copied db_config.html from assets to web_statics"
+        else
+            print_colored "yellow" "Warning: assets/db_config.html not found"
+        fi
         cp -r "web_statics" "FNOS/qmediasync-arm64/app/"
         print_colored "green" "✓ Copied web_statics directory to FNOS/qmediasync-arm64/app/"
     else
@@ -320,6 +334,13 @@ else
     fi
     
     if [ -d "web_statics" ]; then
+        # 从assets目录复制db_config.html到web_statics目录
+        if [ -f "assets/db_config.html" ]; then
+            cp "assets/db_config.html" "web_statics/"
+            print_colored "green" "✓ Copied db_config.html from assets to web_statics"
+        else
+            print_colored "yellow" "Warning: assets/db_config.html not found"
+        fi
         cp -r "web_statics" "FNOS/qmediasync-amd64/app/"
         print_colored "green" "✓ Copied web_statics directory to FNOS/qmediasync-amd64/app/"
     else

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据库配置 - QMediaSync</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .title {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .step {
+            display: none;
+        }
+
+        .step.active {
+            display: block;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 14px 24px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #ffffff;
+            color: #333;
+        }
+
+        .btn:hover {
+            background: #f8f9fa;
+            border-color: #d0d0d0;
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+            border-color: #6c757d;
+        }
+
+        .btn-back {
+            background: #f8f9fa;
+            color: #666;
+            border-color: #e0e0e0;
+            margin-right: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group input[type="number"] {
+            width: 100px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            display: block;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 16px;
+            margin-bottom: 24px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .warning-box.visible {
+            display: block;
+        }
+
+        .warning-box .warning-title {
+            color: #856404;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .warning-box .warning-text {
+            color: #856404;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">数据库配置</h1>
+
+        {{ if .isRestricted }}
+        <div class="warning-box visible">
+            <div class="warning-title">⚠️ 位置警告</div>
+            <div class="warning-text">{{ .warningMsg }}</div>
+        </div>
+        {{ end }}
+
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>正在保存配置...</p>
+        </div>
+
+        <div id="message" class="message"></div>
+
+        <div id="step-engine" class="step active">
+            <p class="subtitle">请选择数据库引擎：</p>
+            <div class="btn-group">
+                <button class="btn" onclick="selectEngine('sqlite')">SQLite</button>
+                <p style="font-size: 16px; color: #333; text-align: center; margin-top: -8px;">最简单的方案，无需配置，Windows 建议选择。如果你看不懂这两个选项，一定选这个。</p>
+                <button class="btn" onclick="selectEngine('postgres')">PostgreSQL</button>
+                <p style="font-size: 16px; color: #333; text-align: center; margin-top: -8px;">需要启动一个独立的数据库服务器，可以使用内嵌版本或独立安装</p>
+            </div>
+        </div>
+
+        <div id="step-postgres-type" class="step">
+            <p class="subtitle">请选择 PostgreSQL 类型：</p>
+            <div class="btn-group">
+                <button class="btn" onclick="selectPostgresType('embedded')">嵌入式 (Embedded)</button>
+                <p style="font-size: 16px; color: #333; text-align: center; margin-top: -8px;">只有 Windows 和 Docker 版本提供，使用 QMediaSync 内置的 PostgreSQL，无需自己安装，但可能出现无法启动等问题</p>
+                <button class="btn" onclick="selectPostgresType('external')">外部连接 (External)</button>
+                <p style="font-size: 16px; color: #333; text-align: center; margin-top: -8px;">如果你有已经安装好的 PostgreSQL，Docker容器或者直接安装或者远程服务器均可，请在下一个页面输入连接信息直接使用</p>
+                <button class="btn btn-back" onclick="goBack('engine')">返回</button>
+            </div>
+        </div>
+
+        <div id="step-postgres-config" class="step">
+            <p class="subtitle">请输入 PostgreSQL 外部连接信息：</p>
+            <p style="font-size: 16px; color: #333; text-align: center; margin-bottom: 20px;">请提前创建输入的数据库，并给输入的用户所有该库的权限</p>
+            <div class="form-group">
+                <label for="host">主机地址</label>
+                <input type="text" id="host" value="localhost">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="port">端口</label>
+                    <input type="number" id="port" value="5432">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="user">用户名</label>
+                <input type="text" id="user" placeholder="postgres">
+            </div>
+            <div class="form-group">
+                <label for="password">密码</label>
+                <input type="password" id="password" placeholder="输入密码">
+            </div>
+            <div class="form-group">
+                <label for="database">数据库名</label>
+                <input type="text" id="database" value="qmediasync">
+            </div>
+            <div class="btn-group">
+                <button class="btn" onclick="saveConfig()">保存配置</button>
+                <button class="btn btn-back" onclick="goBack('postgres-type')">返回</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentConfig = {
+            engine: '',
+            postgresType: ''
+        };
+
+        function selectEngine(engine) {
+            currentConfig.engine = engine;
+            if (engine === 'sqlite') {
+                saveConfig();
+            } else {
+                showStep('step-postgres-type');
+            }
+        }
+
+        function selectPostgresType(type) {
+            currentConfig.postgresType = type;
+            if (type === 'embedded') {
+                saveConfig();
+            } else {
+                showStep('step-postgres-config');
+            }
+        }
+
+        function goBack(targetStep) {
+            showStep('step-' + targetStep);
+        }
+
+        function showStep(stepId) {
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('active');
+            });
+            document.getElementById(stepId).classList.add('active');
+        }
+
+        function saveConfig() {
+            const data = {
+                engine: currentConfig.engine,
+                postgresType: currentConfig.postgresType
+            };
+
+            if (currentConfig.engine === 'postgres' && currentConfig.postgresType === 'external') {
+                data.host = document.getElementById('host').value;
+                data.port = parseInt(document.getElementById('port').value);
+                data.user = document.getElementById('user').value;
+                data.password = document.getElementById('password').value;
+                data.database = document.getElementById('database').value;
+
+                if (!data.host || !data.user || !data.password || !data.database) {
+                    showMessage('error', '请填写所有必填字段');
+                    return;
+                }
+            }
+
+            document.getElementById('loading').classList.add('active');
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('active');
+            });
+            document.getElementById('message').classList.remove('error', 'success');
+
+            fetch('/api/config/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                document.getElementById('loading').classList.remove('active');
+                if (result.success) {
+                    showMessage('success', result.message);
+                } else {
+                    document.getElementById('loading').classList.remove('active');
+                    showMessage('error', result.error || '保存失败');
+                    showStep('step-engine');
+                }
+            })
+            .catch(error => {
+                document.getElementById('loading').classList.remove('active');
+                showMessage('error', '请求失败: ' + error.message);
+                showStep('step-engine');
+            });
+        }
+
+        function showMessage(type, text) {
+            const messageEl = document.getElementById('message');
+            messageEl.className = 'message ' + type;
+            messageEl.textContent = text;
+        }
+    </script>
+</body>
+</html>
