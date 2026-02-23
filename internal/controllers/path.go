@@ -117,7 +117,7 @@ func GetLocalPath(parentPath string) ([]DirResp, error) {
 				if helpers.AccessiblePathes != "" || helpers.SharePathes != "" {
 					accessiblePaths := helpers.AccessiblePathes
 					sharePaths := helpers.SharePathes
-					accessiblePaths = ":" + sharePaths
+					accessiblePaths += ":" + sharePaths
 					// 用冒号分割
 					paths := strings.Split(accessiblePaths, ":")
 					for _, path := range paths {
