@@ -306,7 +306,7 @@ func CreateSyncPath(sourceType SourceType, accountId uint, baseCid, localPath, r
 	}
 
 	if customConfig {
-		syncPathSetting = *syncPathSetting.DecodeArr(false)
+		syncPathSetting = *syncPathSetting.EncodeArr()
 	} else {
 		syncPathSetting = GetStrmSettingDefault()
 	}
