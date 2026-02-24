@@ -25,12 +25,22 @@ func InitSqlite3(dbFile string) *gorm.DB {
 	// if !helpers.PathExists(dbFile) {
 	// 	return nil
 	// }
-	sqliteDb, err := gorm.Open(sqlite.Open(dbFile+"?cache=shared&_journal_mode=WAL&busy_timeout=30000&synchronous=NORMAL&foreign_keys=ON&cache_size=-100000"), &gorm.Config{
+	sqliteDb, err := gorm.Open(sqlite.Open(dbFile+"?mode=wal&cache=shared&_journal_mode=WAL&busy_timeout=30000&synchronous=NORMAL&foreign_keys=ON&cache_size=-100000"), &gorm.Config{
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {
 		panic(fmt.Sprintf("failed to connect database: %v", err))
 	}
+	sqlDB, dbError := sqliteDb.DB()
+	if dbError != nil {
+		return nil
+	}
+
+	// SetMaxIdleConns 设置空闲连接池中连接的最大数量
+	sqlDB.SetMaxIdleConns(10)
+
+	// SetMaxOpenConns 设置打开数据库连接的最大数量。
+	sqlDB.SetMaxOpenConns(100)
 	return sqliteDb
 }
 

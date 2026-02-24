@@ -236,9 +236,10 @@ func (settings *Settings) UpdateStrm(req SettingStrm) bool {
 		return false
 	}
 	settings.SettingStrm = *strm
-	// helpers.AppLogger.Infof("更新STRM设置: %+v", SettingsGlobal.SettingStrm.VideoExtArr)
+
 	// ctx := context.Background()
 	updateData := strm.ToMap(true, true)
+	helpers.AppLogger.Infof("更新STRM设置: %+v", updateData)
 	err := db.Db.Model(settings).Where("id = ?", settings.ID).Updates(updateData).Error
 	// _, err = gorm.G[Settings](db.Db).Where("id = ?", settings.ID).Updates(ctx, updateData)
 	if err != nil {

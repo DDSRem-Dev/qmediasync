@@ -266,7 +266,7 @@ func DeleteNetdiskMovieByEmbyItemId(itemId string) error {
 		helpers.AppLogger.Errorf("查询网盘路径 %s 下的文件失败: %v", syncFile.Path, err)
 		return err
 	}
-	helpers.AppLogger.Infof("准备删除Emby Item %s 关联的网盘文件 %s", itemId, syncFile.Path+syncFile.FileName)
+	helpers.AppLogger.Infof("准备删除Emby Item %s 关联的网盘文件 %s", itemId, syncFile.Path+"/"+syncFile.FileName)
 	// 检查是否只有一个视频文件
 	videoFileCount := 0
 	// 顺便遍历出视频文件对应的元数据文件，以视频文件basename开头的元数据文件
@@ -349,7 +349,7 @@ func DeleteNetdiskEpisodeByEmbyItemId(itemId string) error {
 		helpers.AppLogger.Errorf("查询网盘路径 %s 下的文件失败: %v", syncFile.Path, err)
 		return err
 	}
-	helpers.AppLogger.Infof("准备删除Emby Item %s 关联的网盘文件 %s", itemId, syncFile.Path+syncFile.FileName)
+	helpers.AppLogger.Infof("准备删除Emby Item %s 关联的网盘文件 %s", itemId, syncFile.Path+"/"+syncFile.FileName)
 	// 顺便遍历出视频文件对应的元数据文件，以视频文件basename开头的元数据文件
 	ext := filepath.Ext(syncFile.FileName)
 	baseName := strings.TrimSuffix(syncFile.FileName, ext)

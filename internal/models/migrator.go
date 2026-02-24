@@ -26,7 +26,7 @@ func (*Migrator) TableName() string {
 // 如果已有数据库则从数据库中获取版本，根据版本执行变更
 func Migrate() {
 	// sqliteDb := db.InitSqlite3(dbFile)
-	maxVersion := 29
+	maxVersion := 30
 	// 先初始化所有表和基础数据
 	if !InitDB(maxVersion) {
 		// 初始化数据库版本表
@@ -347,6 +347,10 @@ func Migrate() {
 	}
 	if migrator.VersionCode == 28 {
 		db.Db.AutoMigrate(Media{}, MediaEpisode{})
+		migrator.UpdateVersionCode(db.Db)
+	}
+	if migrator.VersionCode == 29 {
+		db.Db.AutoMigrate(EmbyLibrarySyncPath{})
 		migrator.UpdateVersionCode(db.Db)
 	}
 	helpers.AppLogger.Infof("当前数据库版本 %d", migrator.VersionCode)

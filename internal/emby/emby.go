@@ -65,7 +65,7 @@ func PerformEmbySync() (int, error) {
 	}
 
 	// 准备并发池
-	workerCount := 50
+	workerCount := 2
 	jobs := make(chan embySyncTask, workerCount*2)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
