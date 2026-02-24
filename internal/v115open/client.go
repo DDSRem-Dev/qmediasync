@@ -167,6 +167,7 @@ func (c *OpenClient) doAuthRequest(ctx context.Context, url string, req *resty.R
 	req.SetAuthToken(c.AccessToken).SetDoNotParseResponse(true)
 
 	var lastErr error
+	var lastRespBytes []byte
 	for attempt := 0; attempt <= options.MaxRetries; attempt++ {
 		// 使用全局队列执行器处理请求
 		executor := GetGlobalExecutor()
@@ -197,6 +198,7 @@ func (c *OpenClient) doAuthRequest(ctx context.Context, url string, req *resty.R
 					return queueResp.Response, queueResp.RespBytes, nil
 				}
 			}
+			helpers.V115Log.Debugf("2请求 %s %s 响应: %s", req.Method, url, string(queueResp.RespBytes))
 			return queueResp.Response, queueResp.RespBytes, nil
 		}
 
@@ -228,6 +230,7 @@ func (c *OpenClient) doAuthRequest(ctx context.Context, url string, req *resty.R
 			helpers.V115Log.Warnf("%s %s 请求失败，%+v秒后重试 (第%d次尝试)", req.Method, url, options.RetryDelay.Seconds(), attempt+1)
 			time.Sleep(options.RetryDelay)
 		}
+		lastRespBytes = queueResp.RespBytes
 	}
-	return nil, nil, lastErr
+	return nil, lastRespBytes, lastErr
 }

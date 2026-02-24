@@ -427,6 +427,11 @@ func initOthers() {
 	models.UpdateUploadingToPending()
 	// 下载中的任务改为待下载
 	models.UpdateDownloadingToPending()
+	// account, _ := models.GetAccountById(1)
+	// client := account.Get115Client()
+	// _, err := client.GetFsDetailByCid(context.Background(), "31123123123123")
+	// helpers.AppLogger.Errorf("获取文件详情失败: %v", err)
+	// panic("test")
 }
 
 // 设置路由

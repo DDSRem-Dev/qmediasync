@@ -367,6 +367,7 @@ func (qe *QueueExecutor) executeRequest(req *QueuedRequest) (*resty.Response, *R
 	}
 
 	if resp.Code != 0 {
+		// helpers.V115Log.Errorf("错误码：%d，错误信息：%s", resp.Code, string(resBytes))
 		return response, resp, resBytes, fmt.Errorf("错误码：%d，错误信息：%s", resp.Code, resp.Message)
 	}
 

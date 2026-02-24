@@ -161,7 +161,7 @@ func (c *OpenClient) GetFsDetailByPath(ctx context.Context, path string) (*FileD
 	helpers.V115Log.Infof("调用文件详情接口, path: %s", path)
 	url := fmt.Sprintf("%s/open/folder/get_info", OPEN_BASE_URL)
 	req := c.client.R().SetFormData(data).SetMethod("POST")
-	respData := &FileDetail{}
+	var respData *FileDetail
 	_, bodyBytes, err := c.doAuthRequest(ctx, url, req, MakeRequestConfig(3, 1, 60), respData)
 	if err != nil {
 		helpers.V115Log.Errorf("调用文件详情接口失败: %v", err)
@@ -173,8 +173,16 @@ func (c *OpenClient) GetFsDetailByPath(ctx context.Context, path string) (*FileD
 		helpers.V115Log.Errorf("解析文件详情接口响应失败: %v", bodyErr)
 		return respData, bodyErr
 	}
-	if resp.Code == 430004 {
-		return nil, fmt.Errorf("not found")
+	if resp.Code != 0 {
+		// helpers.V115Log.Errorf("文件 %s 不存在: %v", fileId, err)
+		return nil, fmt.Errorf("Code=%d, Message=%s", resp.Code, resp.Message)
+	}
+	if err != nil {
+		helpers.V115Log.Errorf("调用文件详情接口失败: %v", err)
+		return nil, err
+	}
+	if respData == nil {
+		return nil, fmt.Errorf("115 返回空数据")
 	}
 	return respData, nil
 }
@@ -189,21 +197,25 @@ func (c *OpenClient) GetFsDetailByCid(ctx context.Context, fileId string) (*File
 	data["file_id"] = fileId
 	url := fmt.Sprintf("%s/open/folder/get_info", OPEN_BASE_URL)
 	req := c.client.R().SetQueryParams(data).SetMethod("GET")
-	respData := &FileDetail{}
+	var respData *FileDetail
 	_, bodyBytes, err := c.doAuthRequest(ctx, url, req, MakeRequestConfig(3, 1, 60), respData)
 	resp := &RespBaseBool[json.RawMessage]{}
+	// helpers.V115Log.Debugf("调用文件详情接口, fileId: %s => %s", fileId, string(bodyBytes))
 	bodyErr := json.Unmarshal(bodyBytes, &resp)
 	if bodyErr != nil {
-		helpers.V115Log.Errorf("解析文件详情接口响应失败: %v", bodyErr)
+		helpers.V115Log.Errorf("解析文件详情接口响应失败: %s => %v", string(bodyBytes), bodyErr)
 		return respData, bodyErr
 	}
-	if resp.Code == 430004 {
-		helpers.V115Log.Errorf("文件 %s 不存在: %v", fileId, err)
-		return nil, fmt.Errorf("not found")
+	if resp.Code != 0 {
+		// helpers.V115Log.Errorf("文件 %s 不存在: %v", fileId, err)
+		return nil, fmt.Errorf("Code=%d, Message=%s", resp.Code, resp.Message)
 	}
 	if err != nil {
 		helpers.V115Log.Errorf("调用文件详情接口失败: %v", err)
 		return nil, err
+	}
+	if respData == nil {
+		return nil, fmt.Errorf("115 返回空数据")
 	}
 	// helpers.AppLogger.Infof("文件 %s 详情中的文件名: %s", fileId, respData.FileName)
 	return respData, nil

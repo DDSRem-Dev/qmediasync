@@ -341,7 +341,10 @@ func getOpenlistDirs(parentPath string, account *models.Account, page, pageSize 
 func get115Dirs(parentId string, account *models.Account, page, pageSize int) ([]*FileItem, error) {
 	client := account.Get115Client()
 	ctx := context.Background()
-	resp, err := client.GetFsList(ctx, parentId, true, true, true, page, pageSize)
+	if parentId == "" {
+		parentId = "0"
+	}
+	resp, err := client.GetFsList(ctx, parentId, true, false, true, (page-1)*pageSize, pageSize)
 	if err != nil {
 		helpers.AppLogger.Warnf("获取115目录列表失败: 父目录：%s, 错误:%v", parentId, err)
 		return nil, err
